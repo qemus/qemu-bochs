@@ -95,7 +95,13 @@ for arch in i386 amd64; do
     | /opt/RosBE/RosBE.sh . 0 "${arch}"
 done
 
-mkdir -p /dist /package-x86 /package-x64
+mkdir -p \
+  /dist \
+  /release/2k/x86 \
+  /release/xp/x86 \
+  /release/xp/x64 \
+  /release/2k3/x86 \
+  /release/2k3/x64
 
 driver_version="${VERSION_ARG}"
 case "${driver_version}" in
@@ -111,29 +117,45 @@ x64_sys="$(find /build-amd64 -type f -name qbochs.sys -print -quit)"
 test -n "${x86_sys}"
 test -n "${x64_sys}"
 
-cp "${x86_sys}" /package-x86/qbochs.sys
-cp "${x64_sys}" /package-x64/qbochs.sys
-cp /qbochs/license.md /package-x86/license.txt
-cp /qbochs/license.md /package-x64/license.txt
+cp "${x86_sys}" /release/2k/x86/qbochs.sys
+cp "${x86_sys}" /release/xp/x86/qbochs.sys
+cp "${x86_sys}" /release/2k3/x86/qbochs.sys
+cp "${x64_sys}" /release/xp/x64/qbochs.sys
+cp "${x64_sys}" /release/2k3/x64/qbochs.sys
+
+# Windows 2000 predates platform-decorated Models sections. Keep its INF
+# undecorated, while XP/Server 2003 use explicit NTx86/NTamd64 installs.
+sed \
+  -e "s/@MANUFACTURER_DECORATION@//g" \
+  -e "s/@MODELS_DECORATION@//g" \
+  -e "s/@INSTALL_DECORATION@//g" \
+  -e "s/@VERSION@/${driver_version}/g" \
+  /qbochs/src/qbochs.inf.in > /release/2k/x86/qbochs.inf
 
 sed \
-  -e "s/@ARCH@/x86/g" \
+  -e "s/@MANUFACTURER_DECORATION@/,NTx86/g" \
+  -e "s/@MODELS_DECORATION@/.NTx86/g" \
+  -e "s/@INSTALL_DECORATION@/.NTx86/g" \
   -e "s/@VERSION@/${driver_version}/g" \
-  /qbochs/src/qbochs.inf.in > /package-x86/qbochs.inf
+  /qbochs/src/qbochs.inf.in > /release/xp/x86/qbochs.inf
+cp /release/xp/x86/qbochs.inf /release/2k3/x86/qbochs.inf
 
 sed \
-  -e "s/@ARCH@/amd64/g" \
+  -e "s/@MANUFACTURER_DECORATION@/,NTamd64/g" \
+  -e "s/@MODELS_DECORATION@/.NTamd64/g" \
+  -e "s/@INSTALL_DECORATION@/.NTamd64/g" \
   -e "s/@VERSION@/${driver_version}/g" \
-  /qbochs/src/qbochs.inf.in > /package-x64/qbochs.inf
+  /qbochs/src/qbochs.inf.in > /release/xp/x64/qbochs.inf
+cp /release/xp/x64/qbochs.inf /release/2k3/x64/qbochs.inf
+
+cp /qbochs/license.md /release/license.txt
+
+test ! -e /release/2k/x64
+test -z "$(grep -R '@[A-Z_]*@' /release --include='*.inf' || true)"
 
 (
-  cd /package-x86
-  zip -9 -q "/dist/QBochs-${VERSION_ARG}-x86.zip" qbochs.sys qbochs.inf license.txt
-)
-
-(
-  cd /package-x64
-  zip -9 -q "/dist/QBochs-${VERSION_ARG}-x64.zip" qbochs.sys qbochs.inf license.txt
+  cd /release
+  zip -9 -q -r "/dist/QBochs-${VERSION_ARG}.zip" 2k xp 2k3 license.txt
 )
 
 # Publish the corresponding source alongside GPL driver binaries.
