@@ -67,6 +67,12 @@ jobs:
           name: qbochs-unsigned
           path: output
       -
+        name: Cache Inf2Cat
+        uses: actions/cache@v4
+        with:
+          path: 'C:\Program Files (x86)\Windows Kits\8.1\bin\x86'
+          key: inf2cat-windows-sdk-8.1-8.100.26654.0-windows-2022
+      -
         name: Create and sign Server 2003 catalogs
         shell: powershell
         run: |
