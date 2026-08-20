@@ -45,7 +45,7 @@ jobs:
             VERSION_ARG=${{ env.VERSION }}
       -
         name: Upload unsigned artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: qbochs-unsigned
           path: output/*
@@ -62,7 +62,7 @@ jobs:
     steps:
       -
         name: Download unsigned artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: qbochs-unsigned
           path: output
@@ -256,7 +256,7 @@ jobs:
           }
       -
         name: Upload signed artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: qbochs-signed
           path: output/*
@@ -273,7 +273,7 @@ jobs:
     steps:
       -
         name: Download signed artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: qbochs-signed
           path: output
