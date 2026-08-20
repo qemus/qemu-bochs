@@ -1,0 +1,71 @@
+/*
+ * PROJECT:     QBochs
+ * LICENSE:     GPL-2.0-or-later (https://spdx.org/licenses/GPL-2.0-or-later)
+ * PURPOSE:     QEMU/Bochs DISPI display miniport for Windows NT 5.x
+ * COPYRIGHT:   Copyright 2022 Hervé Poussineau <hpoussin@reactos.org>
+ *
+ * Based on the ReactOS Bochs graphics card driver.
+ */
+
+#ifndef QBOCHS_H
+#define QBOCHS_H
+
+#include <ntdef.h>
+#include <dderror.h>
+#include <miniport.h>
+#include <video.h>
+#include <devioctl.h>
+#include <section_attribs.h>
+
+#define VBE_EDID_SIZE                        0x80
+
+#define VBE_DISPI_IOPORT_INDEX               0x01CE
+#define VBE_DISPI_IOPORT_DATA                0x01CF
+#define VBE_DISPI_INDEX_ID                   0x00
+  #define VBE_DISPI_ID0                        0xB0C0
+  #define VBE_DISPI_ID1                        0xB0C1
+  #define VBE_DISPI_ID2                        0xB0C2
+  #define VBE_DISPI_ID3                        0xB0C3
+  #define VBE_DISPI_ID4                        0xB0C4
+  #define VBE_DISPI_ID5                        0xB0C5
+#define VBE_DISPI_INDEX_XRES                 0x01
+#define VBE_DISPI_INDEX_YRES                 0x02
+#define VBE_DISPI_INDEX_BPP                  0x03
+#define VBE_DISPI_INDEX_ENABLE               0x04
+  #define VBE_DISPI_DISABLED                   0x00
+  #define VBE_DISPI_ENABLED                    0x01
+  #define VBE_DISPI_GETCAPS                    0x02
+  #define VBE_DISPI_LFB_ENABLED                0x40
+#define VBE_DISPI_INDEX_VIDEO_MEMORY_64K     0x0A
+
+#define QBOCHS_MAX_MODES 23
+
+typedef struct
+{
+    USHORT XResolution;
+    USHORT YResolution;
+} QBOCHS_SIZE, *PQBOCHS_SIZE;
+
+typedef struct
+{
+    PUCHAR Mapped;
+    PHYSICAL_ADDRESS RangeStart;
+    ULONG RangeLength;
+    UCHAR RangeInIoSpace;
+} QBOCHS_ADDRESS_RANGE;
+
+typedef struct
+{
+    QBOCHS_SIZE AvailableModeInfo[QBOCHS_MAX_MODES];
+    ULONG AvailableModeCount;
+    USHORT CurrentMode;
+
+    QBOCHS_ADDRESS_RANGE FrameBuffer;
+    QBOCHS_ADDRESS_RANGE IoPorts;
+
+    ULONG MaxXResolution;
+    ULONG MaxYResolution;
+    ULONG VramSize64K;
+} QBOCHS_DEVICE_EXTENSION, *PQBOCHS_DEVICE_EXTENSION;
+
+#endif /* QBOCHS_H */

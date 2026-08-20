@@ -1,0 +1,57 @@
+; QBochs display miniport driver
+;
+; QEMU Standard VGA / Bochs DISPI
+
+[Version]
+Signature = "$Windows NT$"
+Class = Display
+ClassGUID = {4D36E968-E325-11CE-BFC1-08002BE10318}
+Provider = %ProviderName%
+DriverVer = 08/20/2026,@VERSION@
+
+[DestinationDirs]
+QBochs.CopyFiles = 12
+
+[SourceDisksNames]
+1 = %DiskName%,,,
+
+[SourceDisksFiles]
+qbochs.sys = 1
+
+[Manufacturer]
+%ManufacturerName% = QBochs,NT@ARCH@
+
+[QBochs.NT@ARCH@]
+%DeviceDesc% = QBochs.Install,PCI\VEN_1234&DEV_1111
+
+[QBochs.Install]
+CopyFiles = QBochs.CopyFiles
+
+[QBochs.CopyFiles]
+qbochs.sys
+
+[QBochs.Install.SoftwareSettings]
+AddReg = QBochs.SoftwareSettings
+
+[QBochs.SoftwareSettings]
+HKR,,InstalledDisplayDrivers,0x00010000,"framebuf"
+HKR,,VgaCompatible,0x00010001,0
+HKR,,Acceleration.Level,0x00010001,5
+
+[QBochs.Install.Services]
+AddService = qbochs,0x00000002,QBochs.Service
+
+[QBochs.Service]
+DisplayName = %ServiceDesc%
+ServiceType = 1
+StartType = 3
+ErrorControl = 0
+ServiceBinary = %12%\qbochs.sys
+LoadOrderGroup = Video
+
+[Strings]
+ProviderName = "QBochs Project"
+ManufacturerName = "QEMU"
+DeviceDesc = "QEMU Bochs Display Adapter"
+ServiceDesc = "QBochs Display Miniport"
+DiskName = "QBochs Driver Installation Disk"
