@@ -27,6 +27,9 @@ jobs:
         name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
       -
+        name: Set RosBE cache scope
+        run: echo "ROSBE_CACHE=$(gcc -march=native -Q --help=target | sha1sum | awk '{print $1}')" >> "$GITHUB_ENV"
+      -
         name: Build artifacts
         uses: docker/build-push-action@v7
         with:
@@ -35,8 +38,8 @@ jobs:
           provenance: false
           outputs: type=local,dest=output
           platforms: linux/amd64
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=rosbe-${{ env.ROSBE_CACHE }}
+          cache-to: type=gha,mode=max,scope=rosbe-${{ env.ROSBE_CACHE }}
           build-args: |
             VERSION_ARG=${{ env.VERSION }}
       -
