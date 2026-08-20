@@ -1,9 +1,0 @@
-QBochs is derived from the ReactOS Bochs graphics card miniport originally
-written by Hervé Poussineau. The driver sources in this directory are licensed
-under GPL-2.0-or-later.
-
-Upstream source:
-https://github.com/reactos/reactos/tree/c7e1c79921f30275f32ce916b6517a78bcf05368/win32ss/drivers/miniport/bochs
-
-The build currently uses ReactOS commit:
-c7e1c79921f30275f32ce916b6517a78bcf05368
