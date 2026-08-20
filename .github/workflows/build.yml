@@ -12,7 +12,7 @@ jobs:
     name: Build
     runs-on: ubuntu-latest
     env:
-      VERSION: 1.${{ vars.MAJOR }}.${{ vars.MINOR }}
+      VERSION: ${{ vars.MAJOR }}.${{ vars.MINOR }}
     permissions:
       actions: write
       packages: write
@@ -55,9 +55,8 @@ jobs:
           repo-token: ${{ secrets.REPO_ACCESS_TOKEN }}
       -
         name: Increment version variable
-        uses: action-pack/increment@v2
+        uses: action-pack/bump@v2
         with:
-          name: 'MAJOR'
           token: ${{ secrets.REPO_ACCESS_TOKEN }}
       -
         name: Send mail
