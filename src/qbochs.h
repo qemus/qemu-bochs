@@ -54,6 +54,13 @@ typedef struct
     UCHAR RangeInIoSpace;
 } QBOCHS_ADDRESS_RANGE;
 
+typedef enum
+{
+    QBochsCachePolicyUnselected = 0,
+    QBochsCachePolicyUncached,
+    QBochsCachePolicyWriteCombined
+} QBOCHS_CACHE_POLICY;
+
 typedef struct
 {
     QBOCHS_SIZE AvailableModeInfo[QBOCHS_MAX_MODES];
@@ -66,6 +73,9 @@ typedef struct
     ULONG MaxXResolution;
     ULONG MaxYResolution;
     ULONG VramSize64K;
+
+    QBOCHS_CACHE_POLICY FrameBufferCachePolicy;
+    BOOLEAN WriteCombiningReady;
 } QBOCHS_DEVICE_EXTENSION, *PQBOCHS_DEVICE_EXTENSION;
 
 #endif /* QBOCHS_H */
