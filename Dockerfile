@@ -162,8 +162,8 @@ test -z "$(grep -R '@[A-Z_]*@' /release --include='*.inf' || true)"
 tar -czf "/dist/QBochs-${VERSION_ARG}-source.tar.gz" \
   -C /qbochs src Dockerfile readme.md license.md
 
-file /package-x86/qbochs.sys
-file /package-x64/qbochs.sys
+file /release/xp/x86/qbochs.sys
+file /release/xp/x64/qbochs.sys
 EOF_BUILD
 
 FROM scratch AS artifact
