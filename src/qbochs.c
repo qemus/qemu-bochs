@@ -12,29 +12,52 @@
 #define QBOCHS_WRITE_COMBINE_READY L"QBochsWriteCombineReady"
 
 static const QBOCHS_SIZE QBochsAvailableResolutions[] = {
-    { 640, 480 },   /* VGA */
-    { 800, 600 },   /* SVGA */
-    { 1024, 600 },  /* WSVGA */
-    { 1024, 768 },  /* XGA */
-    { 1152, 864 },  /* XGA+ */
-    { 1280, 720 },  /* WXGA-H */
-    { 1280, 768 },  /* WXGA */
-    { 1280, 960 },  /* SXGA- */
-    { 1280, 1024 }, /* SXGA */
-    { 1368, 768 },  /* HD ready */
-    { 1400, 1050 }, /* SXGA+ */
-    { 1440, 900 },  /* WSXGA */
-    { 1600, 900 },  /* HD+ */
-    { 1600, 1200 }, /* UXGA */
-    { 1680, 1050 }, /* WSXGA+ */
-    { 1920, 1080 }, /* FHD */
-    { 2048, 1536 }, /* QXGA */
-    { 2560, 1440 }, /* WQHD */
-    { 2560, 1600 }, /* WQXGA */
-    { 2560, 2048 }, /* QSXGA */
-    { 2800, 2100 }, /* QSXGA+ */
-    { 3200, 2400 }, /* QUXGA */
-    { 3840, 2160 }, /* 4K UHD-1 */
+    { 640, 480, 32 },   /* VGA */
+    { 640, 480, 16 },
+    { 800, 600, 32 },   /* SVGA */
+    { 800, 600, 16 },
+    { 1024, 600, 32 },  /* WSVGA */
+    { 1024, 600, 16 },
+    { 1024, 768, 32 },  /* XGA */
+    { 1024, 768, 16 },
+    { 1152, 864, 32 },  /* XGA+ */
+    { 1152, 864, 16 },
+    { 1280, 720, 32 },  /* WXGA-H */
+    { 1280, 720, 16 },
+    { 1280, 768, 32 },  /* WXGA */
+    { 1280, 768, 16 },
+    { 1280, 960, 32 },  /* SXGA- */
+    { 1280, 960, 16 },
+    { 1280, 1024, 32 }, /* SXGA */
+    { 1280, 1024, 16 },
+    { 1368, 768, 32 },  /* HD ready */
+    { 1368, 768, 16 },
+    { 1400, 1050, 32 }, /* SXGA+ */
+    { 1400, 1050, 16 },
+    { 1440, 900, 32 },  /* WSXGA */
+    { 1440, 900, 16 },
+    { 1600, 900, 32 },  /* HD+ */
+    { 1600, 900, 16 },
+    { 1600, 1200, 32 }, /* UXGA */
+    { 1600, 1200, 16 },
+    { 1680, 1050, 32 }, /* WSXGA+ */
+    { 1680, 1050, 16 },
+    { 1920, 1080, 32 }, /* FHD */
+    { 1920, 1080, 16 },
+    { 2048, 1536, 32 }, /* QXGA */
+    { 2048, 1536, 16 },
+    { 2560, 1440, 32 }, /* WQHD */
+    { 2560, 1440, 16 },
+    { 2560, 1600, 32 }, /* WQXGA */
+    { 2560, 1600, 16 },
+    { 2560, 2048, 32 }, /* QSXGA */
+    { 2560, 2048, 16 },
+    { 2800, 2100, 32 }, /* QSXGA+ */
+    { 2800, 2100, 16 },
+    { 3200, 2400, 32 }, /* QUXGA */
+    { 3200, 2400, 16 },
+    { 3840, 2160, 32 }, /* 4K UHD-1 */
+    { 3840, 2160, 16 },
 };
 
 CODE_SEG("PAGE")
@@ -207,7 +230,8 @@ QBochsInitializeModes(
             continue;
 
         RequiredBytes = QBochsAvailableResolutions[Index].XResolution *
-                        QBochsAvailableResolutions[Index].YResolution * 4;
+                        QBochsAvailableResolutions[Index].YResolution *
+                        (QBochsAvailableResolutions[Index].BitsPerPixel / 8);
         if (RequiredBytes > VramBytes)
             continue;
 
@@ -240,19 +264,34 @@ QBochsGetModeInfo(
     ModeInfo->ModeIndex = Index;
     ModeInfo->VisScreenWidth = AvailableModeInfo->XResolution;
     ModeInfo->VisScreenHeight = AvailableModeInfo->YResolution;
-    ModeInfo->ScreenStride = AvailableModeInfo->XResolution * 4;
+    ModeInfo->ScreenStride = AvailableModeInfo->XResolution * (AvailableModeInfo->BitsPerPixel / 8);
     ModeInfo->NumberOfPlanes = 1;
-    ModeInfo->BitsPerPlane = 32;
+    ModeInfo->BitsPerPlane = AvailableModeInfo->BitsPerPixel;
     ModeInfo->Frequency = 60;
     ModeInfo->XMillimeter = AvailableModeInfo->XResolution * 254 / 960;
     ModeInfo->YMillimeter = AvailableModeInfo->YResolution * 254 / 960;
-    ModeInfo->NumberRedBits = 8;
-    ModeInfo->NumberGreenBits = 8;
-    ModeInfo->NumberBlueBits = 8;
-    ModeInfo->RedMask = 0xff0000;
-    ModeInfo->GreenMask = 0x00ff00;
-    ModeInfo->BlueMask = 0x0000ff;
-    ModeInfo->AttributeFlags = VIDEO_MODE_GRAPHICS | VIDEO_MODE_COLOR | VIDEO_MODE_NO_OFF_SCREEN;
+
+    if (AvailableModeInfo->BitsPerPixel == 16)
+    {
+        ModeInfo->NumberRedBits = 5;
+        ModeInfo->NumberGreenBits = 6;
+        ModeInfo->NumberBlueBits = 5;
+        ModeInfo->RedMask = 0xf800;
+        ModeInfo->GreenMask = 0x07e0;
+        ModeInfo->BlueMask = 0x001f;
+    }
+    else
+    {
+        ModeInfo->NumberRedBits = 8;
+        ModeInfo->NumberGreenBits = 8;
+        ModeInfo->NumberBlueBits = 8;
+        ModeInfo->RedMask = 0xff0000;
+        ModeInfo->GreenMask = 0x00ff00;
+        ModeInfo->BlueMask = 0x0000ff;
+    }
+
+    ModeInfo->AttributeFlags = VIDEO_MODE_GRAPHICS | VIDEO_MODE_COLOR |
+                               VIDEO_MODE_LINEAR | VIDEO_MODE_NO_OFF_SCREEN;
     ModeInfo->VideoMemoryBitmapWidth = AvailableModeInfo->XResolution;
     ModeInfo->VideoMemoryBitmapHeight = AvailableModeInfo->YResolution;
 }
@@ -272,7 +311,8 @@ QBochsMapVideoMemory(
     ULONG VideoRamLength;
 
     VideoMemory = DeviceExtension->FrameBuffer.RangeStart;
-    VideoRamLength = 4 *
+    VideoRamLength =
+        (DeviceExtension->AvailableModeInfo[DeviceExtension->CurrentMode].BitsPerPixel / 8) *
         DeviceExtension->AvailableModeInfo[DeviceExtension->CurrentMode].XResolution *
         DeviceExtension->AvailableModeInfo[DeviceExtension->CurrentMode].YResolution;
     MapInformation->VideoRamBase = RequestedAddress->RequestedVirtualAddress;
@@ -423,8 +463,10 @@ QBochsSetCurrentMode(
     QBochsWriteDispI(DeviceExtension, VBE_DISPI_INDEX_ENABLE, VBE_DISPI_DISABLED);
     Ret = QBochsWriteDispIAndCheck(DeviceExtension, VBE_DISPI_INDEX_XRES, AvailableModeInfo->XResolution) &&
           QBochsWriteDispIAndCheck(DeviceExtension, VBE_DISPI_INDEX_YRES, AvailableModeInfo->YResolution) &&
-          QBochsWriteDispIAndCheck(DeviceExtension, VBE_DISPI_INDEX_BPP, 32);
-    QBochsWriteDispI(DeviceExtension, VBE_DISPI_INDEX_ENABLE, VBE_DISPI_LFB_ENABLED | VBE_DISPI_ENABLED);
+          QBochsWriteDispIAndCheck(DeviceExtension, VBE_DISPI_INDEX_BPP, AvailableModeInfo->BitsPerPixel);
+    QBochsWriteDispI(DeviceExtension,
+                     VBE_DISPI_INDEX_ENABLE,
+                     VBE_DISPI_LFB_ENABLED | VBE_DISPI_ENABLED | VBE_DISPI_NOCLEARMEM);
 
     if (!Ret)
     {
