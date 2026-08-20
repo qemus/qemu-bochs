@@ -20,7 +20,7 @@ QEMU's `std` VGA device is a very convenient virtual display adapter: it has a s
 For years the practical choices have been:
 
 - use QEMU `cirrus`, which has inbox Windows support but is constrained by the GD5446's small framebuffer and legacy mode limits;
-- use a universal VBE driver such as BearWindows VBEMP;
+- use a universal VBE driver such as BearWindows `VBEMP`
 - use another virtual graphics device whose available NT5 drivers may not match QEMU's implementation;
 - remain on the generic VGA fallback.
 
