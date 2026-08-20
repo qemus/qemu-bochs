@@ -7,12 +7,13 @@ concurrency:
   group: build
   cancel-in-progress: false
 
+env:
+  VERSION: ${{ vars.MAJOR }}.${{ vars.MINOR }}
+
 jobs:
   build:
     name: Build
     runs-on: ubuntu-latest
-    env:
-      VERSION: ${{ vars.MAJOR }}.${{ vars.MINOR }}
     permissions:
       actions: write
       packages: write
@@ -42,6 +43,240 @@ jobs:
           cache-to: type=gha,mode=max,scope=rosbe-${{ env.ROSBE_CACHE }}
           build-args: |
             VERSION_ARG=${{ env.VERSION }}
+      -
+        name: Upload unsigned artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: qbochs-unsigned
+          path: output/*
+          if-no-files-found: error
+          retention-days: 1
+
+  sign:
+    name: Sign Server 2003
+    needs: build
+    runs-on: windows-2022
+    permissions:
+      actions: write
+      contents: read
+    steps:
+      -
+        name: Download unsigned artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: qbochs-unsigned
+          path: output
+      -
+        name: Create and sign Server 2003 catalogs
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+
+          $zip = Join-Path $PWD 'output\QBochs.zip'
+          $packageRoot = Join-Path $PWD 'package'
+
+          if (-not (Test-Path $zip)) {
+            throw "Missing build artifact: $zip"
+          }
+
+          if (Test-Path $packageRoot) {
+            Remove-Item $packageRoot -Recurse -Force
+          }
+
+          Expand-Archive -Path $zip -DestinationPath $packageRoot -Force
+
+          $driverDirs = @(
+            (Join-Path $packageRoot '2k3\x86'),
+            (Join-Path $packageRoot '2k3\x64')
+          )
+
+          foreach ($dir in $driverDirs) {
+            $inf = Join-Path $dir 'qbochs.inf'
+            $sys = Join-Path $dir 'qbochs.sys'
+
+            if (-not (Test-Path $inf) -or -not (Test-Path $sys)) {
+              throw "Incomplete Server 2003 driver package: $dir"
+            }
+
+            $text = Get-Content -Path $inf -Raw
+            if ($text -notmatch '(?im)^\s*CatalogFile\s*=') {
+              $text = $text -replace '(?m)^(DriverVer\s*=.*)$', "`$1`r`nCatalogFile = qbochs.cat"
+              Set-Content -Path $inf -Value $text -Encoding ASCII
+            }
+          }
+
+          function Get-Inf2CatCandidates {
+            $roots = @(
+              "${env:ProgramFiles(x86)}\Windows Kits",
+              "$env:ProgramFiles\Windows Kits"
+            )
+
+            $files = foreach ($root in $roots) {
+              if (Test-Path $root) {
+                Get-ChildItem -Path $root -Filter Inf2Cat.exe -File -Recurse -ErrorAction SilentlyContinue
+              }
+            }
+
+            $files |
+              Sort-Object FullName -Descending |
+              Select-Object -ExpandProperty FullName -Unique
+          }
+
+          function Test-Inf2Cat {
+            param(
+              [Parameter(Mandatory = $true)]
+              [string]$Path
+            )
+
+            $testDir = Join-Path $packageRoot '2k3\x64'
+            $cat = Join-Path $testDir 'qbochs.cat'
+            Remove-Item $cat -Force -ErrorAction SilentlyContinue
+
+            Write-Host "Trying Inf2Cat: $Path"
+            & $Path "/driver:$testDir" '/os:Server2003_X64' '/uselocaltime' '/verbose'
+            $ok = ($LASTEXITCODE -eq 0 -and (Test-Path $cat))
+
+            Remove-Item $cat -Force -ErrorAction SilentlyContinue
+            return $ok
+          }
+
+          $inf2cat = $null
+          foreach ($candidate in Get-Inf2CatCandidates) {
+            if (Test-Inf2Cat -Path $candidate) {
+              $inf2cat = $candidate
+              break
+            }
+          }
+
+          if (-not $inf2cat) {
+            Write-Host 'No installed Inf2Cat supports Server 2003; installing Windows SDK 8.1 tools.'
+
+            choco install windows-sdk-8.1 --version=8.100.26654.0 -y --no-progress
+            if ($LASTEXITCODE -notin @(0, 3010, 1641)) {
+              throw "Windows SDK 8.1 installation failed with exit code $LASTEXITCODE."
+            }
+
+            foreach ($candidate in Get-Inf2CatCandidates) {
+              if (Test-Inf2Cat -Path $candidate) {
+                $inf2cat = $candidate
+                break
+              }
+            }
+          }
+
+          if (-not $inf2cat) {
+            throw 'No Inf2Cat installation can create Server 2003 catalogs.'
+          }
+
+          Write-Host "Using Inf2Cat: $inf2cat"
+
+          & $inf2cat "/driver:$($driverDirs[0])" '/os:Server2003_X86' '/uselocaltime' '/verbose'
+          if ($LASTEXITCODE -ne 0) {
+            throw 'Inf2Cat failed for Server 2003 x86.'
+          }
+
+          & $inf2cat "/driver:$($driverDirs[1])" '/os:Server2003_X64' '/uselocaltime' '/verbose'
+          if ($LASTEXITCODE -ne 0) {
+            throw 'Inf2Cat failed for Server 2003 x64.'
+          }
+
+          foreach ($dir in $driverDirs) {
+            if (-not (Test-Path (Join-Path $dir 'qbochs.cat'))) {
+              throw "Inf2Cat did not create qbochs.cat in $dir"
+            }
+          }
+
+          $cert = New-SelfSignedCertificate `
+            -Type CodeSigningCert `
+            -Subject 'CN=QBochs Project' `
+            -CertStoreLocation 'Cert:\CurrentUser\My' `
+            -KeyAlgorithm RSA `
+            -KeyLength 2048 `
+            -HashAlgorithm SHA1 `
+            -KeyExportPolicy NonExportable `
+            -NotAfter (Get-Date).AddYears(20)
+
+          if (-not $cert) {
+            throw 'Failed to create the QBochs signing certificate.'
+          }
+
+          $cer = Join-Path $env:RUNNER_TEMP 'qbochs.cer'
+          Export-Certificate -Cert $cert -FilePath $cer -Type CERT | Out-Null
+
+          Import-Certificate -FilePath $cer -CertStoreLocation 'Cert:\CurrentUser\Root' | Out-Null
+          Import-Certificate -FilePath $cer -CertStoreLocation 'Cert:\CurrentUser\TrustedPublisher' | Out-Null
+
+          $signTool = Get-ChildItem `
+            -Path "${env:ProgramFiles(x86)}\Windows Kits", "$env:ProgramFiles\Windows Kits" `
+            -Filter signtool.exe `
+            -File `
+            -Recurse `
+            -ErrorAction SilentlyContinue |
+            Sort-Object FullName -Descending |
+            Select-Object -First 1 -ExpandProperty FullName
+
+          if (-not $signTool) {
+            throw 'SignTool.exe was not found.'
+          }
+
+          Write-Host "Using SignTool: $signTool"
+
+          foreach ($dir in $driverDirs) {
+            $cat = Join-Path $dir 'qbochs.cat'
+            $inf = Join-Path $dir 'qbochs.inf'
+            $sys = Join-Path $dir 'qbochs.sys'
+
+            & $signTool sign /v /fd SHA1 /s My /sha1 $cert.Thumbprint $cat
+            if ($LASTEXITCODE -ne 0) {
+              throw "SignTool failed to sign $cat"
+            }
+
+            Copy-Item $cer (Join-Path $dir 'qbochs.cer') -Force
+
+            & $signTool verify /pa /v /c $cat $inf
+            if ($LASTEXITCODE -ne 0) {
+              throw "Catalog verification failed for $inf"
+            }
+
+            & $signTool verify /pa /v /c $cat $sys
+            if ($LASTEXITCODE -ne 0) {
+              throw "Catalog verification failed for $sys"
+            }
+          }
+
+          Remove-Item $zip -Force
+          Compress-Archive -Path (Join-Path $packageRoot '*') -DestinationPath $zip -CompressionLevel Optimal
+
+          foreach ($dir in $driverDirs) {
+            foreach ($file in 'qbochs.inf', 'qbochs.sys', 'qbochs.cat', 'qbochs.cer') {
+              if (-not (Test-Path (Join-Path $dir $file))) {
+                throw "Signed package is missing $file in $dir"
+              }
+            }
+          }
+      -
+        name: Upload signed artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: qbochs-signed
+          path: output/*
+          if-no-files-found: error
+          retention-days: 1
+
+  release:
+    name: Release
+    needs: sign
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      -
+        name: Download signed artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: qbochs-signed
+          path: output
       -
         name: Create a release
         uses: action-pack/github-release@v2
