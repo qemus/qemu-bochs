@@ -44,7 +44,7 @@ jobs:
         uses: action-pack/github-release@v2
         with:
           tag: "v${{ env.VERSION }}"
-          title: "QBochs v${{ env.VERSION }}"
+          title: "v${{ env.VERSION }}"
           token: ${{ secrets.REPO_ACCESS_TOKEN }}
       -
         name: Add artifacts to release
