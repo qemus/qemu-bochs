@@ -253,7 +253,11 @@ QBochsMapVideoMemory(
         DeviceExtension->AvailableModeInfo[DeviceExtension->CurrentMode].XResolution *
         DeviceExtension->AvailableModeInfo[DeviceExtension->CurrentMode].YResolution;
 
-    /* Prefer a write-combined mapping for fast linear framebuffer writes. */
+#if 0
+    /*
+     * Experimental write-combined mapping. Keep this disabled until the
+     * conservative framebuffer path is proven stable across Microsoft NT5.
+     */
     MemSpace = VIDEO_MEMORY_SPACE_MEMORY | VIDEO_MEMORY_SPACE_P6CACHE;
     Status = VideoPortMapMemory(DeviceExtension,
                                 VideoMemory,
@@ -261,7 +265,7 @@ QBochsMapVideoMemory(
                                 &MemSpace,
                                 &MapInformation->VideoRamBase);
 
-    /* Older video-port implementations may reject P6CACHE; keep a safe fallback. */
+    /* Fall back if the video port implementation rejects P6CACHE. */
     if (Status != NO_ERROR)
     {
         MemSpace = VIDEO_MEMORY_SPACE_MEMORY;
@@ -271,6 +275,15 @@ QBochsMapVideoMemory(
                                     &MemSpace,
                                     &MapInformation->VideoRamBase);
     }
+#else
+    /* Conservative NT5 baseline: map the framebuffer without write combining. */
+    MemSpace = VIDEO_MEMORY_SPACE_MEMORY;
+    Status = VideoPortMapMemory(DeviceExtension,
+                                VideoMemory,
+                                &MapInformation->VideoRamLength,
+                                &MemSpace,
+                                &MapInformation->VideoRamBase);
+#endif
 
     if (Status != NO_ERROR)
     {
