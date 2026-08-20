@@ -74,7 +74,7 @@ RUN git clone --filter=blob:none --no-checkout https://github.com/reactos/reacto
     git checkout --detach FETCH_HEAD
 
 COPY src/ /qbochs/src/
-COPY Dockerfile readme.md license.md /qbochs/
+COPY Dockerfile CMakeLists.txt readme.md license.md /qbochs/
 
 # Replace only the upstream Bochs miniport build directory. The rest of the
 # ReactOS tree supplies the NT5 headers, import libraries, and build machinery.
@@ -82,7 +82,7 @@ RUN rm -rf /reactos/win32ss/drivers/miniport/bochs/* && \
     cp /qbochs/src/qbochs.c /reactos/win32ss/drivers/miniport/bochs/ && \
     cp /qbochs/src/qbochs.h /reactos/win32ss/drivers/miniport/bochs/ && \
     cp /qbochs/src/qbochs.rc /reactos/win32ss/drivers/miniport/bochs/ && \
-    cp /qbochs/src/CMakeLists.txt /reactos/win32ss/drivers/miniport/bochs/
+    cp /qbochs/CMakeLists.txt /reactos/win32ss/drivers/miniport/bochs/
 
 RUN <<'EOF_BUILD'
 set -eux
@@ -157,7 +157,7 @@ test -z "$(grep -R '@[A-Z_]*@' /release --include='*.inf' || true)"
 
 # Publish the corresponding source alongside GPL driver binaries.
 tar -czf "/dist/QBochs-${VERSION_ARG}-source.tar.gz" \
-  -C /qbochs src Dockerfile readme.md license.md
+  -C /qbochs src Dockerfile CMakeLists.txt readme.md license.md
 
 file /release/xp/x86/qbochs.sys
 file /release/xp/x64/qbochs.sys
