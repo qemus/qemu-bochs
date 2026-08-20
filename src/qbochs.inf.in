@@ -22,6 +22,7 @@ qbochs.sys = 1
 %ManufacturerName% = QBochs@MANUFACTURER_DECORATION@
 
 [QBochs@MODELS_DECORATION@]
+%DeviceDesc% = QBochs.Install,PCI\VEN_1234&DEV_1111&SUBSYS_11001AF4
 %DeviceDesc% = QBochs.Install,PCI\VEN_1234&DEV_1111
 
 [QBochs.Install]
