@@ -19,9 +19,10 @@ QBochs.CopyFiles = 12
 qbochs.sys = 1
 
 [Manufacturer]
-%ManufacturerName% = QBochs,NT@ARCH@
+%ManufacturerName% = QBochs@MANUFACTURER_DECORATION@
 
-[QBochs.NT@ARCH@]
+[QBochs@MODELS_DECORATION@]
+%DeviceDesc% = QBochs.Install,PCI\VEN_1234&DEV_1111&SUBSYS_11001AF4
 %DeviceDesc% = QBochs.Install,PCI\VEN_1234&DEV_1111
 
 [QBochs.Install]
@@ -36,6 +37,9 @@ AddReg = QBochs.SoftwareSettings
 [QBochs.SoftwareSettings]
 HKR,,InstalledDisplayDrivers,0x00010000,"framebuf"
 HKR,,VgaCompatible,0x00010001,0
+; Reset the internal WC readiness marker on every driver install/update.
+HKR,,QBochsWriteCombineReady,0x00010001,0
+; Use the NT5 framebuffer shadow buffer for cached GDI rendering.
 HKR,,Acceleration.Level,0x00010001,5
 
 [QBochs.Install.Services]
@@ -50,8 +54,8 @@ ServiceBinary = %12%\qbochs.sys
 LoadOrderGroup = Video
 
 [Strings]
-ProviderName = "QBochs Project"
-ManufacturerName = "QEMU"
+ProviderName = "QBochs"
+ManufacturerName = "QBochs"
 DeviceDesc = "QEMU Bochs Display Adapter"
 ServiceDesc = "QBochs Display Miniport"
 DiskName = "QBochs Driver Installation Disk"

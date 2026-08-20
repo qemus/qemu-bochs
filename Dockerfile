@@ -74,7 +74,7 @@ RUN git clone --filter=blob:none --no-checkout https://github.com/reactos/reacto
     git checkout --detach FETCH_HEAD
 
 COPY src/ /qbochs/src/
-COPY Dockerfile readme.md license.md /qbochs/
+COPY Dockerfile CMakeLists.txt readme.md license.md /qbochs/
 
 # Replace only the upstream Bochs miniport build directory. The rest of the
 # ReactOS tree supplies the NT5 headers, import libraries, and build machinery.
@@ -82,7 +82,7 @@ RUN rm -rf /reactos/win32ss/drivers/miniport/bochs/* && \
     cp /qbochs/src/qbochs.c /reactos/win32ss/drivers/miniport/bochs/ && \
     cp /qbochs/src/qbochs.h /reactos/win32ss/drivers/miniport/bochs/ && \
     cp /qbochs/src/qbochs.rc /reactos/win32ss/drivers/miniport/bochs/ && \
-    cp /qbochs/src/CMakeLists.txt /reactos/win32ss/drivers/miniport/bochs/
+    cp /qbochs/CMakeLists.txt /reactos/win32ss/drivers/miniport/bochs/
 
 RUN <<'EOF_BUILD'
 set -eux
@@ -95,7 +95,13 @@ for arch in i386 amd64; do
     | /opt/RosBE/RosBE.sh . 0 "${arch}"
 done
 
-mkdir -p /dist /package-x86 /package-x64
+mkdir -p \
+  /dist \
+  /release/2k/x86 \
+  /release/xp/x86 \
+  /release/xp/x64 \
+  /release/2k3/x86 \
+  /release/2k3/x64
 
 driver_version="${VERSION_ARG}"
 case "${driver_version}" in
@@ -111,37 +117,50 @@ x64_sys="$(find /build-amd64 -type f -name qbochs.sys -print -quit)"
 test -n "${x86_sys}"
 test -n "${x64_sys}"
 
-cp "${x86_sys}" /package-x86/qbochs.sys
-cp "${x64_sys}" /package-x64/qbochs.sys
-cp /qbochs/license.md /package-x86/license.txt
-cp /qbochs/license.md /package-x64/license.txt
+cp "${x86_sys}" /release/2k/x86/qbochs.sys
+cp "${x86_sys}" /release/xp/x86/qbochs.sys
+cp "${x86_sys}" /release/2k3/x86/qbochs.sys
+cp "${x64_sys}" /release/xp/x64/qbochs.sys
+cp "${x64_sys}" /release/2k3/x64/qbochs.sys
+
+# Windows 2000 keeps an undecorated Models section. XP/Server 2003 decorate
+# only Manufacturer/Models; the DDInstall and Services sections stay common.
+sed \
+  -e "s/@MANUFACTURER_DECORATION@//g" \
+  -e "s/@MODELS_DECORATION@//g" \
+  -e "s/@VERSION@/${driver_version}/g" \
+  /qbochs/src/qbochs.inf.in > /release/2k/x86/qbochs.inf
 
 sed \
-  -e "s/@ARCH@/x86/g" \
+  -e "s/@MANUFACTURER_DECORATION@/,NTx86/g" \
+  -e "s/@MODELS_DECORATION@/.NTx86/g" \
   -e "s/@VERSION@/${driver_version}/g" \
-  /qbochs/src/qbochs.inf.in > /package-x86/qbochs.inf
+  /qbochs/src/qbochs.inf.in > /release/xp/x86/qbochs.inf
+cp /release/xp/x86/qbochs.inf /release/2k3/x86/qbochs.inf
 
 sed \
-  -e "s/@ARCH@/amd64/g" \
+  -e "s/@MANUFACTURER_DECORATION@/,NTamd64/g" \
+  -e "s/@MODELS_DECORATION@/.NTamd64/g" \
   -e "s/@VERSION@/${driver_version}/g" \
-  /qbochs/src/qbochs.inf.in > /package-x64/qbochs.inf
+  /qbochs/src/qbochs.inf.in > /release/xp/x64/qbochs.inf
+cp /release/xp/x64/qbochs.inf /release/2k3/x64/qbochs.inf
+
+cp /qbochs/license.md /release/license.txt
+
+test ! -e /release/2k/x64
+test -z "$(grep -R '@[A-Z_]*@' /release --include='*.inf' || true)"
 
 (
-  cd /package-x86
-  zip -9 -q "/dist/QBochs-${VERSION_ARG}-x86.zip" qbochs.sys qbochs.inf license.txt
-)
-
-(
-  cd /package-x64
-  zip -9 -q "/dist/QBochs-${VERSION_ARG}-x64.zip" qbochs.sys qbochs.inf license.txt
+  cd /release
+  zip -9 -q -r "/dist/QBochs.zip" 2k xp 2k3 license.txt
 )
 
 # Publish the corresponding source alongside GPL driver binaries.
 tar -czf "/dist/QBochs-${VERSION_ARG}-source.tar.gz" \
-  -C /qbochs src Dockerfile readme.md license.md
+  -C /qbochs src Dockerfile CMakeLists.txt readme.md license.md
 
-file /package-x86/qbochs.sys
-file /package-x64/qbochs.sys
+file /release/xp/x86/qbochs.sys
+file /release/xp/x64/qbochs.sys
 EOF_BUILD
 
 FROM scratch AS artifact
