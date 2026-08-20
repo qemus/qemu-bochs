@@ -113,10 +113,8 @@ test -n "${x64_sys}"
 
 cp "${x86_sys}" /package-x86/qbochs.sys
 cp "${x64_sys}" /package-x64/qbochs.sys
-cp /qbochs/src/license.txt /package-x86/license.txt
-cp /qbochs/src/license.txt /package-x64/license.txt
-cp /qbochs/src/notice.txt /package-x86/notice.txt
-cp /qbochs/src/notice.txt /package-x64/notice.txt
+cp /qbochs/license.md /package-x86/license.txt
+cp /qbochs/license.md /package-x64/license.txt
 
 sed \
   -e "s/@ARCH@/x86/g" \
@@ -130,12 +128,12 @@ sed \
 
 (
   cd /package-x86
-  zip -9 -q "/dist/QBochs-${VERSION_ARG}-x86.zip" qbochs.sys qbochs.inf license.txt notice.txt
+  zip -9 -q "/dist/QBochs-${VERSION_ARG}-x86.zip" qbochs.sys qbochs.inf license.txt
 )
 
 (
   cd /package-x64
-  zip -9 -q "/dist/QBochs-${VERSION_ARG}-x64.zip" qbochs.sys qbochs.inf license.txt notice.txt
+  zip -9 -q "/dist/QBochs-${VERSION_ARG}-x64.zip" qbochs.sys qbochs.inf license.txt
 )
 
 # Publish the corresponding source alongside GPL driver binaries.
