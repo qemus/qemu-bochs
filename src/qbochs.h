@@ -36,14 +36,16 @@
   #define VBE_DISPI_ENABLED                    0x01
   #define VBE_DISPI_GETCAPS                    0x02
   #define VBE_DISPI_LFB_ENABLED                0x40
+  #define VBE_DISPI_NOCLEARMEM                  0x80
 #define VBE_DISPI_INDEX_VIDEO_MEMORY_64K     0x0A
 
-#define QBOCHS_MAX_MODES 23
+#define QBOCHS_MAX_MODES 46
 
 typedef struct
 {
     USHORT XResolution;
     USHORT YResolution;
+    USHORT BitsPerPixel;
 } QBOCHS_SIZE, *PQBOCHS_SIZE;
 
 typedef struct
