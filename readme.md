@@ -9,6 +9,10 @@
 
 QEMU Bochs display driver for Windows NT 5.x, targeting Windows 2000, XP, and Server 2003 on x86 and x64.
 
+## Acknowledgements 🙏
+
+Special thanks to Hervé Poussineau, this project would not exist without his invaluable work.
+
 ## Stars 🌟
 [![Stargazers](https://raw.githubusercontent.com/star-stats/stars/refs/heads/data/charts/qemus-qemu-bochs.svg)](https://github.com/qemus/qemu-bochs/stargazers)
 
