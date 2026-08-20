@@ -9,7 +9,9 @@
 
 QEMU Bochs display driver for Windows NT 5.x, targeting Windows 2000, XP, and Server 2003 on x86 and x64.
 
-It exists to provide a modern, redistributable display driver for QEMU Standard VGA without falling back to the very limited Cirrus device or depending on a closed third-party driver. QBochs is derived from the ReactOS Bochs miniport and talks directly to QEMU's Bochs DISPI interface while using the native Windows NT framebuffer display stack.
+It exists to provide a modern, redistributable display driver for QEMU Standard VGA without falling back to the very limited Cirrus device or depending on a closed third-party driver.
+
+It is derived from the ReactOS Bochs miniport and talks directly to QEMU's Bochs DISPI interface while using the native Windows NT framebuffer display stack.
 
 ## Why QBochs?
 
