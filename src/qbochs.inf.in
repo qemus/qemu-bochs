@@ -22,24 +22,24 @@ qbochs.sys = 1
 %ManufacturerName% = QBochs@MANUFACTURER_DECORATION@
 
 [QBochs@MODELS_DECORATION@]
-%DeviceDesc% = QBochs.Install@INSTALL_DECORATION@,PCI\VEN_1234&DEV_1111
+%DeviceDesc% = QBochs.Install,PCI\VEN_1234&DEV_1111
 
-[QBochs.Install@INSTALL_DECORATION@]
+[QBochs.Install]
 CopyFiles = QBochs.CopyFiles
 
 [QBochs.CopyFiles]
 qbochs.sys
 
-[QBochs.Install@INSTALL_DECORATION@.SoftwareSettings]
+[QBochs.Install.SoftwareSettings]
 AddReg = QBochs.SoftwareSettings
 
 [QBochs.SoftwareSettings]
 HKR,,InstalledDisplayDrivers,0x00010000,"framebuf"
 HKR,,VgaCompatible,0x00010001,0
-; Experimental NT5 shadow buffering is disabled until the baseline is stable.
-; HKR,,Acceleration.Level,0x00010001,5
+; Use the NT5 framebuffer shadow buffer for cached GDI rendering.
+HKR,,Acceleration.Level,0x00010001,5
 
-[QBochs.Install@INSTALL_DECORATION@.Services]
+[QBochs.Install.Services]
 AddService = qbochs,0x00000002,QBochs.Service
 
 [QBochs.Service]
@@ -51,8 +51,8 @@ ServiceBinary = %12%\qbochs.sys
 LoadOrderGroup = Video
 
 [Strings]
-ProviderName = "QBochs Project"
-ManufacturerName = "QEMU"
+ProviderName = "QBochs"
+ManufacturerName = "QBochs"
 DeviceDesc = "QEMU Bochs Display Adapter"
 ServiceDesc = "QBochs Display Miniport"
 DiskName = "QBochs Driver Installation Disk"
