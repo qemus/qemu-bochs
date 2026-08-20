@@ -31,6 +31,7 @@ RUN apt-get update && \
       perl \
       pkg-config \
       python3 \
+      python-is-python3 \
       rsync \
       subversion \
       sudo \
@@ -44,11 +45,21 @@ RUN apt-get update && \
     rm -rf /var/lib/apt/lists/*
 
 # Use the same RosBE bootstrap used by the upstream ReactOS Linux CI.
+# The helper does not reliably propagate download/prerequisite failures, so
+# verify the resulting toolchain and retry transient bootstrap failures.
 RUN wget -qO /tmp/build_rosbe_ci.sh \
       https://gist.githubusercontent.com/zefklop/b2d6a0b470c70183e93d5285a03f5899/raw/build_rosbe_ci.sh && \
     chmod +x /tmp/build_rosbe_ci.sh && \
-    /tmp/build_rosbe_ci.sh /opt/RosBE && \
-    rm -f /tmp/build_rosbe_ci.sh
+    for attempt in 1 2 3; do \
+      rm -rf /opt/RosBE /tmp/rosbe-build && \
+      mkdir -p /tmp/rosbe-build && \
+      (cd /tmp/rosbe-build && /tmp/build_rosbe_ci.sh /opt/RosBE) && \
+      test -x /opt/RosBE/RosBE.sh && break; \
+      echo "RosBE bootstrap attempt ${attempt} failed; retrying..." >&2; \
+      sleep $((attempt * 5)); \
+    done && \
+    test -x /opt/RosBE/RosBE.sh && \
+    rm -rf /tmp/build_rosbe_ci.sh /tmp/rosbe-build
 
 FROM toolchain AS builder
 
