@@ -9,6 +9,8 @@
 
 #include "qbochs.h"
 
+#define QBOCHS_WRITE_COMBINE_READY L"QBochsWriteCombineReady"
+
 static const QBOCHS_SIZE QBochsAvailableResolutions[] = {
     { 640, 480 },   /* VGA */
     { 800, 600 },   /* SVGA */
@@ -77,6 +79,26 @@ QBochsWriteDispIAndCheck(
 {
     QBochsWriteDispI(DeviceExtension, Index, Value);
     return QBochsReadDispI(DeviceExtension, Index) == Value;
+}
+
+CODE_SEG("PAGE")
+static VP_STATUS NTAPI
+QBochsReadWriteCombineReady(
+    _In_ PVOID HwDeviceExtension,
+    _In_ PVOID Context,
+    _In_ PWSTR ValueName,
+    _In_ PVOID ValueData,
+    _In_ ULONG ValueLength)
+{
+    PBOOLEAN Ready = Context;
+
+    (VOID)HwDeviceExtension;
+    (VOID)ValueName;
+
+    if (ValueLength >= sizeof(ULONG))
+        *Ready = (*(PULONG)ValueData != 0);
+
+    return NO_ERROR;
 }
 
 CODE_SEG("PAGE")
@@ -247,48 +269,81 @@ QBochsMapVideoMemory(
     PHYSICAL_ADDRESS VideoMemory;
     ULONG MemSpace;
 
+    ULONG VideoRamLength;
+
     VideoMemory = DeviceExtension->FrameBuffer.RangeStart;
-    MapInformation->VideoRamBase = RequestedAddress->RequestedVirtualAddress;
-    MapInformation->VideoRamLength = 4 *
+    VideoRamLength = 4 *
         DeviceExtension->AvailableModeInfo[DeviceExtension->CurrentMode].XResolution *
         DeviceExtension->AvailableModeInfo[DeviceExtension->CurrentMode].YResolution;
+    MapInformation->VideoRamBase = RequestedAddress->RequestedVirtualAddress;
+    MapInformation->VideoRamLength = VideoRamLength;
 
-#if 0
-    /*
-     * Experimental write-combined mapping. Keep this disabled until the
-     * conservative framebuffer path is proven stable across Microsoft NT5.
-     */
-    MemSpace = VIDEO_MEMORY_SPACE_MEMORY | VIDEO_MEMORY_SPACE_P6CACHE;
-    Status = VideoPortMapMemory(DeviceExtension,
-                                VideoMemory,
-                                &MapInformation->VideoRamLength,
-                                &MemSpace,
-                                &MapInformation->VideoRamBase);
+    if (DeviceExtension->FrameBufferCachePolicy == QBochsCachePolicyUnselected)
+    {
+        /*
+         * Only the first mapping of a boot may choose the cache policy. Once
+         * selected, every mapping of this framebuffer keeps the same policy.
+         */
+        MemSpace = VIDEO_MEMORY_SPACE_MEMORY | VIDEO_MEMORY_SPACE_P6CACHE;
+        Status = VideoPortMapMemory(DeviceExtension,
+                                    VideoMemory,
+                                    &MapInformation->VideoRamLength,
+                                    &MemSpace,
+                                    &MapInformation->VideoRamBase);
 
-    /* Fall back if the video port implementation rejects P6CACHE. */
-    if (Status != NO_ERROR)
+        if (Status == NO_ERROR)
+        {
+            DeviceExtension->FrameBufferCachePolicy = QBochsCachePolicyWriteCombined;
+            VideoDebugPrint((Info, "QBochs: framebuffer write combining enabled\n"));
+        }
+        else
+        {
+            /*
+             * No write-combined mapping was established, so this boot can
+             * safely select the uncached policy and retry exactly once.
+             */
+            DeviceExtension->FrameBufferCachePolicy = QBochsCachePolicyUncached;
+            MapInformation->VideoRamBase = RequestedAddress->RequestedVirtualAddress;
+            MapInformation->VideoRamLength = VideoRamLength;
+            MemSpace = VIDEO_MEMORY_SPACE_MEMORY;
+            Status = VideoPortMapMemory(DeviceExtension,
+                                        VideoMemory,
+                                        &MapInformation->VideoRamLength,
+                                        &MemSpace,
+                                        &MapInformation->VideoRamBase);
+            VideoDebugPrint((Info, "QBochs: write combining unavailable; using uncached framebuffer\n"));
+        }
+    }
+    else
     {
         MemSpace = VIDEO_MEMORY_SPACE_MEMORY;
+        if (DeviceExtension->FrameBufferCachePolicy == QBochsCachePolicyWriteCombined)
+            MemSpace |= VIDEO_MEMORY_SPACE_P6CACHE;
+
         Status = VideoPortMapMemory(DeviceExtension,
                                     VideoMemory,
                                     &MapInformation->VideoRamLength,
                                     &MemSpace,
                                     &MapInformation->VideoRamBase);
     }
-#else
-    /* Conservative NT5 baseline: map the framebuffer without write combining. */
-    MemSpace = VIDEO_MEMORY_SPACE_MEMORY;
-    Status = VideoPortMapMemory(DeviceExtension,
-                                VideoMemory,
-                                &MapInformation->VideoRamLength,
-                                &MemSpace,
-                                &MapInformation->VideoRamBase);
-#endif
 
     if (Status != NO_ERROR)
     {
         StatusBlock->Status = Status;
         return FALSE;
+    }
+
+    if (!DeviceExtension->WriteCombiningReady)
+    {
+        ULONG Ready = 1;
+
+        if (VideoPortSetRegistryParameters(DeviceExtension,
+                                           QBOCHS_WRITE_COMBINE_READY,
+                                           &Ready,
+                                           sizeof(Ready)) == NO_ERROR)
+        {
+            DeviceExtension->WriteCombiningReady = TRUE;
+        }
     }
 
     MapInformation->FrameBufferBase = MapInformation->VideoRamBase;
@@ -481,9 +536,29 @@ QBochsInitialize(
     _In_ PVOID HwDeviceExtension)
 {
     PQBOCHS_DEVICE_EXTENSION DeviceExtension = HwDeviceExtension;
+    VP_STATUS Status;
 
     DeviceExtension->AvailableModeCount = 0;
     DeviceExtension->CurrentMode = 0;
+    DeviceExtension->WriteCombiningReady = FALSE;
+    DeviceExtension->FrameBufferCachePolicy = QBochsCachePolicyUnselected;
+
+    Status = VideoPortGetRegistryParameters(DeviceExtension,
+                                            QBOCHS_WRITE_COMBINE_READY,
+                                            FALSE,
+                                            QBochsReadWriteCombineReady,
+                                            &DeviceExtension->WriteCombiningReady);
+
+    if (Status != NO_ERROR || !DeviceExtension->WriteCombiningReady)
+    {
+        /*
+         * The INF resets the marker on install/update. Keep the first driver
+         * activation uncached so it cannot conflict with an existing VGA
+         * framebuffer mapping. A successful mapping arms WC for the next load.
+         */
+        DeviceExtension->FrameBufferCachePolicy = QBochsCachePolicyUncached;
+        VideoDebugPrint((Info, "QBochs: deferring framebuffer write combining\n"));
+    }
 
     if (!QBochsGetControllerInfo(DeviceExtension))
         return FALSE;
