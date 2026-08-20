@@ -123,19 +123,17 @@ cp "${x86_sys}" /release/2k3/x86/qbochs.sys
 cp "${x64_sys}" /release/xp/x64/qbochs.sys
 cp "${x64_sys}" /release/2k3/x64/qbochs.sys
 
-# Windows 2000 predates platform-decorated Models sections. Keep its INF
-# undecorated, while XP/Server 2003 use explicit NTx86/NTamd64 installs.
+# Windows 2000 keeps an undecorated Models section. XP/Server 2003 decorate
+# only Manufacturer/Models; the DDInstall and Services sections stay common.
 sed \
   -e "s/@MANUFACTURER_DECORATION@//g" \
   -e "s/@MODELS_DECORATION@//g" \
-  -e "s/@INSTALL_DECORATION@//g" \
   -e "s/@VERSION@/${driver_version}/g" \
   /qbochs/src/qbochs.inf.in > /release/2k/x86/qbochs.inf
 
 sed \
   -e "s/@MANUFACTURER_DECORATION@/,NTx86/g" \
   -e "s/@MODELS_DECORATION@/.NTx86/g" \
-  -e "s/@INSTALL_DECORATION@/.NTx86/g" \
   -e "s/@VERSION@/${driver_version}/g" \
   /qbochs/src/qbochs.inf.in > /release/xp/x86/qbochs.inf
 cp /release/xp/x86/qbochs.inf /release/2k3/x86/qbochs.inf
@@ -143,7 +141,6 @@ cp /release/xp/x86/qbochs.inf /release/2k3/x86/qbochs.inf
 sed \
   -e "s/@MANUFACTURER_DECORATION@/,NTamd64/g" \
   -e "s/@MODELS_DECORATION@/.NTamd64/g" \
-  -e "s/@INSTALL_DECORATION@/.NTamd64/g" \
   -e "s/@VERSION@/${driver_version}/g" \
   /qbochs/src/qbochs.inf.in > /release/xp/x64/qbochs.inf
 cp /release/xp/x64/qbochs.inf /release/2k3/x64/qbochs.inf
