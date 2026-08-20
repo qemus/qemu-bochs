@@ -67,12 +67,6 @@ jobs:
           name: qbochs-unsigned
           path: output
       -
-        name: Cache Inf2Cat
-        uses: actions/cache@v4
-        with:
-          path: 'C:\Program Files (x86)\Windows Kits\8.1\bin\x86'
-          key: inf2cat-windows-sdk-8.1-8.100.26654.0-windows-2022
-      -
         name: Create and sign Server 2003 catalogs
         shell: powershell
         run: |
@@ -111,21 +105,50 @@ jobs:
             }
           }
 
-          function Get-Inf2CatCandidates {
-            $roots = @(
-              "${env:ProgramFiles(x86)}\Windows Kits",
-              "$env:ProgramFiles\Windows Kits"
+          function Get-MsiExternalCabinets {
+            param(
+              [Parameter(Mandatory = $true)]
+              [string]$Path
             )
 
-            $files = foreach ($root in $roots) {
-              if (Test-Path $root) {
-                Get-ChildItem -Path $root -Filter Inf2Cat.exe -File -Recurse -ErrorAction SilentlyContinue
+            $installer = New-Object -ComObject WindowsInstaller.Installer
+            $database = $installer.GetType().InvokeMember(
+              'OpenDatabase',
+              'InvokeMethod',
+              $null,
+              $installer,
+              @((Get-Item $Path).FullName, 0)
+            )
+            $view = $database.GetType().InvokeMember(
+              'OpenView',
+              'InvokeMethod',
+              $null,
+              $database,
+              @('SELECT `Cabinet` FROM `Media` WHERE `Cabinet` IS NOT NULL')
+            )
+            $view.GetType().InvokeMember('Execute', 'InvokeMethod', $null, $view, $null) | Out-Null
+
+            try {
+              while ($record = $view.GetType().InvokeMember('Fetch', 'InvokeMethod', $null, $view, $null)) {
+                $cabinet = $record.GetType().InvokeMember(
+                  'StringData',
+                  'GetProperty',
+                  $null,
+                  $record,
+                  1
+                )
+
+                if ($cabinet -and -not $cabinet.StartsWith('#')) {
+                  $cabinet
+                }
               }
             }
-
-            $files |
-              Sort-Object FullName -Descending |
-              Select-Object -ExpandProperty FullName -Unique
+            finally {
+              $view.GetType().InvokeMember('Close', 'InvokeMethod', $null, $view, $null) | Out-Null
+              [void][System.Runtime.InteropServices.Marshal]::ReleaseComObject($view)
+              [void][System.Runtime.InteropServices.Marshal]::ReleaseComObject($database)
+              [void][System.Runtime.InteropServices.Marshal]::ReleaseComObject($installer)
+            }
           }
 
           function Test-Inf2Cat {
@@ -146,32 +169,81 @@ jobs:
             return $ok
           }
 
-          $inf2cat = $null
-          foreach ($candidate in Get-Inf2CatCandidates) {
-            if (Test-Inf2Cat -Path $candidate) {
-              $inf2cat = $candidate
-              break
+          $sdkRoot = Join-Path $env:RUNNER_TEMP 'winsdk81'
+          $sdkExtract = Join-Path $sdkRoot 'extract'
+          $sdkBaseUrl = 'https://download.microsoft.com/download/B/0/C/B0C80BA3-8AD6-4958-810B-6882485230B5/standalonesdk/Installers'
+          $sdkMsiName = 'Windows Software Development Kit-x86_en-us.msi'
+          $sdkMsi = Join-Path $sdkRoot $sdkMsiName
+
+          if (Test-Path $sdkRoot) {
+            Remove-Item $sdkRoot -Recurse -Force
+          }
+          New-Item -ItemType Directory -Path $sdkRoot, $sdkExtract | Out-Null
+
+          Write-Host 'Downloading the Windows SDK 8.1 desktop-tools package metadata.'
+          Invoke-WebRequest `
+            -Uri "$sdkBaseUrl/Windows%20Software%20Development%20Kit-x86_en-us.msi" `
+            -OutFile $sdkMsi `
+            -UseBasicParsing
+
+          $cabinets = @(Get-MsiExternalCabinets -Path $sdkMsi)
+          if ($cabinets.Count -eq 0) {
+            throw 'Windows SDK 8.1 MSI references no external cabinet files.'
+          }
+
+          foreach ($cabinet in $cabinets) {
+            Write-Host "Downloading Windows SDK 8.1 payload: $cabinet"
+            Invoke-WebRequest `
+              -Uri "$sdkBaseUrl/$cabinet" `
+              -OutFile (Join-Path $sdkRoot $cabinet) `
+              -UseBasicParsing
+          }
+
+          Write-Host 'Extracting Windows SDK 8.1 tools without installing the SDK.'
+          $adminInstall = Start-Process `
+            -FilePath msiexec.exe `
+            -ArgumentList @(
+              '/a',
+              "`"$sdkMsi`"",
+              '/qn',
+              "TARGETDIR=`"$sdkExtract`""
+            ) `
+            -Wait `
+            -PassThru
+
+          if ($adminInstall.ExitCode -ne 0) {
+            throw "Windows SDK 8.1 administrative extraction failed with exit code $($adminInstall.ExitCode)."
+          }
+
+          $inf2cat = Get-ChildItem `
+            -Path $sdkExtract `
+            -Filter Inf2Cat.exe `
+            -File `
+            -Recurse |
+            Select-Object -First 1 -ExpandProperty FullName
+
+          if (-not $inf2cat) {
+            throw 'Inf2Cat.exe was not found in the extracted Windows SDK 8.1 package.'
+          }
+
+          $inf2catDir = Split-Path -Parent $inf2cat
+          foreach ($file in @(
+            'Inf2Cat.exe',
+            'inf2cat.exe.manifest',
+            'Microsoft.Whos.Shared.IO.Cabinets.dll',
+            'Microsoft.Whos.Shared.IO.Catalogs.dll',
+            'Microsoft.Whos.Shared.Xml.InfReader.dll',
+            'Microsoft.Whos.Winqual.Submissions.SubmissionBuilder.dll',
+            'Microsoft.Whos.Xml.NonXmlDataReader.dll',
+            'WindowsProtectedFiles.xml'
+          )) {
+            if (-not (Test-Path (Join-Path $inf2catDir $file))) {
+              throw "Extracted Inf2Cat toolset is missing $file"
             }
           }
 
-          if (-not $inf2cat) {
-            Write-Host 'No installed Inf2Cat supports Server 2003; installing Windows SDK 8.1 tools.'
-
-            choco install windows-sdk-8.1 --version=8.100.26654.0 -y --no-progress
-            if ($LASTEXITCODE -notin @(0, 3010, 1641)) {
-              throw "Windows SDK 8.1 installation failed with exit code $LASTEXITCODE."
-            }
-
-            foreach ($candidate in Get-Inf2CatCandidates) {
-              if (Test-Inf2Cat -Path $candidate) {
-                $inf2cat = $candidate
-                break
-              }
-            }
-          }
-
-          if (-not $inf2cat) {
-            throw 'No Inf2Cat installation can create Server 2003 catalogs.'
+          if (-not (Test-Inf2Cat -Path $inf2cat)) {
+            throw 'Extracted Windows SDK 8.1 Inf2Cat cannot create Server 2003 catalogs.'
           }
 
           Write-Host "Using Inf2Cat: $inf2cat"
