@@ -19,26 +19,27 @@ QBochs.CopyFiles = 12
 qbochs.sys = 1
 
 [Manufacturer]
-%ManufacturerName% = QBochs,NT@ARCH@
+%ManufacturerName% = QBochs@MANUFACTURER_DECORATION@
 
-[QBochs.NT@ARCH@]
-%DeviceDesc% = QBochs.Install,PCI\VEN_1234&DEV_1111
+[QBochs@MODELS_DECORATION@]
+%DeviceDesc% = QBochs.Install@INSTALL_DECORATION@,PCI\VEN_1234&DEV_1111
 
-[QBochs.Install]
+[QBochs.Install@INSTALL_DECORATION@]
 CopyFiles = QBochs.CopyFiles
 
 [QBochs.CopyFiles]
 qbochs.sys
 
-[QBochs.Install.SoftwareSettings]
+[QBochs.Install@INSTALL_DECORATION@.SoftwareSettings]
 AddReg = QBochs.SoftwareSettings
 
 [QBochs.SoftwareSettings]
 HKR,,InstalledDisplayDrivers,0x00010000,"framebuf"
 HKR,,VgaCompatible,0x00010001,0
-HKR,,Acceleration.Level,0x00010001,5
+; Experimental NT5 shadow buffering is disabled until the baseline is stable.
+; HKR,,Acceleration.Level,0x00010001,5
 
-[QBochs.Install.Services]
+[QBochs.Install@INSTALL_DECORATION@.Services]
 AddService = qbochs,0x00000002,QBochs.Service
 
 [QBochs.Service]
