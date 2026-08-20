@@ -155,7 +155,7 @@ test -z "$(grep -R '@[A-Z_]*@' /release --include='*.inf' || true)"
 
 (
   cd /release
-  zip -9 -q -r "/dist/QBochs-${VERSION_ARG}.zip" 2k xp 2k3 license.txt
+  zip -9 -q -r "/dist/QBochs.zip" 2k xp 2k3 license.txt
 )
 
 # Publish the corresponding source alongside GPL driver binaries.
