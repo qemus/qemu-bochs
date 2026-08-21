@@ -550,12 +550,11 @@ jobs:
             Test-CatalogSignature -Path $cat -Thumbprint $cert.Thumbprint
             Write-Step ("Catalog signature verified in {0:N2}s." -f $stageTimer.Elapsed.TotalSeconds)
 
-            Copy-Item $cer (Join-Path $dir 'qbochs.cer') -Force
           }
 
           Write-Step 'Validating signed package contents.'
           foreach ($dir in $driverDirs) {
-            foreach ($file in 'qbochs.inf', 'qbochs.sys', 'qbochs.cat', 'qbochs.cer') {
+            foreach ($file in 'qbochs.inf', 'qbochs.sys', 'qbochs.cat') {
               if (-not (Test-Path (Join-Path $dir $file))) {
                 throw "Signed package is missing $file in $dir"
               }
@@ -572,11 +571,9 @@ jobs:
             '2k3\x86\qbochs.inf',
             '2k3\x86\qbochs.sys',
             '2k3\x86\qbochs.cat',
-            '2k3\x86\qbochs.cer',
             '2k3\x64\qbochs.inf',
             '2k3\x64\qbochs.sys',
             '2k3\x64\qbochs.cat',
-            '2k3\x64\qbochs.cer',
             'license.txt'
           )) {
             if (-not (Test-Path (Join-Path $packageRoot $required))) {
@@ -653,11 +650,9 @@ jobs:
             2k3/x86/qbochs.inf \
             2k3/x86/qbochs.sys \
             2k3/x86/qbochs.cat \
-            2k3/x86/qbochs.cer \
             2k3/x64/qbochs.inf \
             2k3/x64/qbochs.sys \
-            2k3/x64/qbochs.cat \
-            2k3/x64/qbochs.cer; do
+            2k3/x64/qbochs.cat; do
             test -f "$package/$required"
           done
 
@@ -694,11 +689,9 @@ jobs:
             2k3/x86/qbochs.inf \
             2k3/x86/qbochs.sys \
             2k3/x86/qbochs.cat \
-            2k3/x86/qbochs.cer \
             2k3/x64/qbochs.inf \
             2k3/x64/qbochs.sys \
-            2k3/x64/qbochs.cat \
-            2k3/x64/qbochs.cer; do
+            2k3/x64/qbochs.cat; do
             if ! printf '%s\n' "${entries[@]}" | grep -Fqx -- "$required"; then
               echo "ERROR: QBochs.zip is missing required entry: $required" >&2
               exit 1
@@ -710,9 +703,7 @@ jobs:
           unzip -q "$zipfile" -d /tmp/qbochs-release-test
 
           test -f /tmp/qbochs-release-test/2k3/x86/qbochs.cat
-          test -f /tmp/qbochs-release-test/2k3/x86/qbochs.cer
           test -f /tmp/qbochs-release-test/2k3/x64/qbochs.cat
-          test -f /tmp/qbochs-release-test/2k3/x64/qbochs.cer
 
           rm -rf "$package"
 
