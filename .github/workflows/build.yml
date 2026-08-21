@@ -69,7 +69,7 @@ jobs:
       -
         name: Restore Inf2Cat cache
         id: cache-inf2cat
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v6
         with:
           path: '${{ runner.temp }}\qbochs-inf2cat81'
           key: inf2cat-wdk81-8.100.25984.0-windows-2022-v2
@@ -223,7 +223,7 @@ jobs:
       -
         name: Save Inf2Cat cache
         if: steps.cache-inf2cat.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v6
         with:
           path: '${{ runner.temp }}\qbochs-inf2cat81'
           key: inf2cat-wdk81-8.100.25984.0-windows-2022-v2
