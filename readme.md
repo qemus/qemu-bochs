@@ -7,11 +7,11 @@
 
 </div></h1>
 
-QEMU Bochs display driver for Windows NT 5.x, targeting Windows 2000, XP, and Server 2003.
+Native QEMU Bochs display driver for Windows NT 5.x, targeting Windows 2000, XP, and Server 2003.
 
-Its goal is to provide a modern display driver for QEMU Standard VGA without falling back to the very limited Cirrus device or depending on a closed or commercial third-party driver.
+QBochs turns QEMU Standard VGA into a properly supported NT5 display adapter, providing high-resolution widescreen modes and 16/32-bit color without switching to the limited Cirrus device or depending on a closed or commercial third-party driver.
 
-It is derived from the ReactOS Bochs miniport and talks directly to QEMU's Bochs DISPI interface while using the native Windows NT framebuffer display stack.
+It is derived from the ReactOS Bochs miniport and talks directly to QEMU's Bochs DISPI interface while retaining the native Windows NT framebuffer display stack.
 
 ## Rationale 💡
 
@@ -19,16 +19,28 @@ QEMU's `std` VGA device is a very convenient virtual display adapter: it has a s
 
 But there never was a native NT 5.x driver for it, so for years the only practical choices have been:
 
+- remain on the generic VGA fallback, with very limited resolution and color-depth options;
 - use QEMU `cirrus`, which has inbox Windows support but is constrained by the GD5446's small framebuffer and legacy mode limits;
-- use a universal VBE driver such as BearWindows `VBEMP`
-- use another virtual graphics device whose available NT5 drivers may not match QEMU's implementation;
-- remain on the generic VGA fallback.
+- use a universal VBE driver such as BearWindows `VBEMP`;
+- use another virtual graphics device whose available NT5 drivers may not match QEMU's implementation.
 
-QBochs takes a narrower approach: support the QEMU/Bochs device directly and keep the implementation small and lean.
+QBochs takes a narrower approach: support QEMU Standard VGA directly while keeping the implementation small and lean.
+
+Compared with the stock VGA fallback, QBochs provides:
+
+- high-resolution and widescreen display modes up to 3840×2160 when sufficient VRAM is available;
+- both 16-bit and 32-bit color modes;
+- proper recognition of the QEMU display adapter instead of leaving it on the generic VGA fallback;
+- direct Bochs DISPI mode setting without requiring BIOS calls after the driver has loaded;
+- access to the large linear framebuffer provided by QEMU Standard VGA.
+
+The goal is not to replace Windows' graphics engine or emulate hardware acceleration. QBochs only supplies the hardware-specific miniport functionality that the inbox NT5 framebuffer stack is missing.
 
 ## Architecture 🏗️
 
 QBochs is an XPDM video miniport. It does not implement a custom GDI display DLL. Instead it supplies mode-setting and framebuffer access to the Windows NT video stack and uses the operating system's inbox `framebuf.dll` for drawing.
+
+This keeps the custom driver surface small: Windows remains responsible for GDI rendering while QBochs handles only the QEMU-specific hardware interface.
 
 ```text
 Windows GDI / desktop
@@ -56,11 +68,15 @@ Windows GDI / desktop
 
 ## Performance ⚡
 
-QBochs deliberately does not emulate a hardware 2D accelerator. On a virtual machine that is not necessarily a disadvantage: the guest CPU is usually hardware-virtualized and extremely fast compared with the machines NT5 originally ran on. The goal is therefore to make software rendering into the framebuffer as inexpensive as possible.
+QBochs deliberately does not emulate a hardware 2D accelerator. On a virtual machine that is not necessarily a disadvantage: the guest CPU is usually hardware-virtualized and extremely fast compared with the machines NT5 originally ran on.
+
+Rather than replacing Microsoft's drawing code, QBochs uses the inbox `framebuf.dll` renderer and focuses on making access to the QEMU linear framebuffer as inexpensive as possible.
 
 ### Write-combined framebuffer 🚀
 
-The miniport requests the framebuffer through `VideoPortMapMemory()` with `VIDEO_MEMORY_SPACE_P6CACHE`, which asks the NT video port driver for a write-combined mapping. Sequential framebuffer writes can then be combined instead of behaving like ordinary uncached PCI memory writes.
+When QBochs can safely own the framebuffer mapping, the miniport requests it through `VideoPortMapMemory()` with `VIDEO_MEMORY_SPACE_P6CACHE`, asking the NT video port driver for write-combined memory.
+
+Sequential framebuffer writes can then be combined instead of behaving like ordinary uncached PCI memory writes.
 
 ### Windows shadow buffering 🪞
 
@@ -89,6 +105,8 @@ QEMU std VGA
 
 The two optimizations complement each other: shadow buffering keeps most drawing in cacheable RAM, while write combining makes the eventual transfer to the linear framebuffer cheaper.
 
+QBochs is therefore intended to provide capable framebuffer graphics with minimal overhead, rather than to claim hardware-accelerated performance.
+
 ## QBochs vs. BearWindows ⚖️
 
 BearWindows has done extensive work on Windows NT framebuffer and Cirrus drivers, and QBochs intentionally borrows the same general performance ideas where they apply. The projects solve different problems, however.
@@ -99,16 +117,16 @@ BearWindows has done extensive work on Windows NT framebuffer and Cirrus drivers
 | Hardware scope | QEMU-specific | Broad physical + virtual VBE hardware | Cirrus-specific |
 | Mode setting | Direct Bochs DISPI registers | VBE/VESA BIOS interface | Cirrus-specific registers |
 | Rendering model | Windows framebuffer GDI | Windows framebuffer GDI | Hardware-specific Cirrus driver |
-| Shadow buffering | Yes | Yes | Driver-specific |
-| Write combining | Requested directly by miniport | Supported/configurable | Driver-specific |
-| Hardware 2D blitter | No | No | Potentially yes |
-| 3D acceleration | No | No | No |
+| Shadow buffering | ✅ | ✅ | Driver-specific |
+| Write combining | ✅ Requested by miniport | Supported/configurable | Driver-specific |
+| Hardware 2D blitter | ❌ | ❌ | Potentially available |
+| 3D acceleration | ❌ | ❌ | ❌ |
 | QEMU framebuffer size | Large | Depends on adapter | Limited to 4 MiB VRAM |
-| High-resolution 32-bit modes | Yes | Depends on adapter | Limited by Cirrus VRAM |
-| BIOS dependency after driver load | No for DISPI mode setting | Yes for VBE operations | No VBE dependency for native Cirrus operation |
-| Free | Yes | No | No |
-| Open-source | Yes | No | No |
-| Redistributable | Yes | No | No |
+| High-resolution 32-bit modes | ✅ | Depends on adapter | Limited by Cirrus VRAM |
+| BIOS-free mode setting after load | ✅ | ❌ | ✅ |
+| Free | ✅ | ❌ | ❌ |
+| Open-source | ✅ | ❌ | ❌ |
+| Redistributable | ✅ | ❌ | ❌ |
 
 ## Supported systems 💻
 
