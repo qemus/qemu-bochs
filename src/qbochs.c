@@ -9,10 +9,6 @@
 
 #include "qbochs.h"
 
-#define QBOCHS_WRITE_COMBINE_READY L"QBochsWriteCombineReady"
-#define QBOCHS_BOOT_UNCACHED_KEY L"\\Registry\\Machine\\System\\CurrentControlSet\\Control\\GraphicsDrivers\\QBochsUncached"
-#define QBOCHS_BOOT_WRITE_COMBINED_KEY L"\\Registry\\Machine\\System\\CurrentControlSet\\Control\\GraphicsDrivers\\QBochsWriteCombined"
-
 static const QBOCHS_SIZE QBochsAvailableResolutions[] = {
     { 640, 480, 32 },   /* VGA */
     { 640, 480, 16 },
@@ -62,6 +58,49 @@ static const QBOCHS_SIZE QBochsAvailableResolutions[] = {
     { 3840, 2160, 16 },
 };
 
+/*
+ * Snapshot taken once in DriverEntry, before VideoPortInitialize creates any
+ * QBochs \Device\VideoN object. The volatile VgaCompatible value identifies
+ * an already-registered VGA-compatible video stack. Ambiguous registry
+ * failures intentionally mean "none" so they cannot silently disable WC.
+ */
+static BOOLEAN QBochsPreviousVgaCompatible;
+
+static BOOLEAN
+QBochsVgaCompatibleExists(VOID)
+{
+    UNICODE_STRING KeyPath;
+    UNICODE_STRING ValueName;
+    OBJECT_ATTRIBUTES ObjectAttributes;
+    HANDLE KeyHandle;
+    ULONG ResultLength;
+    NTSTATUS Status;
+
+    RtlInitUnicodeString(&KeyPath, L"\\Registry\\Machine\\HARDWARE\\DEVICEMAP\\VIDEO");
+    RtlInitUnicodeString(&ValueName, L"VgaCompatible");
+    InitializeObjectAttributes(&ObjectAttributes,
+                               &KeyPath,
+                               OBJ_CASE_INSENSITIVE | OBJ_KERNEL_HANDLE,
+                               NULL,
+                               NULL);
+
+    Status = ZwOpenKey(&KeyHandle, KEY_QUERY_VALUE, &ObjectAttributes);
+    if (!NT_SUCCESS(Status))
+        return FALSE;
+
+    Status = ZwQueryValueKey(KeyHandle,
+                             &ValueName,
+                             KeyValuePartialInformation,
+                             NULL,
+                             0,
+                             &ResultLength);
+    ZwClose(KeyHandle);
+
+    return NT_SUCCESS(Status) ||
+           Status == STATUS_BUFFER_OVERFLOW ||
+           Status == STATUS_BUFFER_TOO_SMALL;
+}
+
 CODE_SEG("PAGE")
 static VOID
 QBochsWriteDispI(
@@ -106,132 +145,6 @@ QBochsWriteDispIAndCheck(
     return QBochsReadDispI(DeviceExtension, Index) == Value;
 }
 
-
-CODE_SEG("PAGE")
-static VP_STATUS NTAPI
-QBochsReadWriteCombineReady(
-    _In_ PVOID HwDeviceExtension,
-    _In_ PVOID Context,
-    _In_ PWSTR ValueName,
-    _In_ PVOID ValueData,
-    _In_ ULONG ValueLength)
-{
-    PBOOLEAN Ready = Context;
-
-    (VOID)HwDeviceExtension;
-    (VOID)ValueName;
-
-    if (ValueLength >= sizeof(ULONG))
-        *Ready = (*(PULONG)ValueData != 0);
-
-    return NO_ERROR;
-}
-
-CODE_SEG("PAGE")
-static BOOLEAN
-QBochsBootKeyExists(
-    _In_ PCWSTR KeyName)
-{
-    UNICODE_STRING KeyPath;
-    OBJECT_ATTRIBUTES ObjectAttributes;
-    HANDLE KeyHandle;
-    NTSTATUS Status;
-
-    RtlInitUnicodeString(&KeyPath, KeyName);
-    InitializeObjectAttributes(&ObjectAttributes,
-                               &KeyPath,
-                               OBJ_CASE_INSENSITIVE | OBJ_KERNEL_HANDLE,
-                               NULL,
-                               NULL);
-
-    Status = ZwOpenKey(&KeyHandle, KEY_READ, &ObjectAttributes);
-    if (!NT_SUCCESS(Status))
-        return FALSE;
-
-    ZwClose(KeyHandle);
-    return TRUE;
-}
-
-CODE_SEG("PAGE")
-static BOOLEAN
-QBochsCreateBootKey(
-    _In_ PCWSTR KeyName)
-{
-    UNICODE_STRING KeyPath;
-    OBJECT_ATTRIBUTES ObjectAttributes;
-    HANDLE KeyHandle;
-    NTSTATUS Status;
-
-    RtlInitUnicodeString(&KeyPath, KeyName);
-    InitializeObjectAttributes(&ObjectAttributes,
-                               &KeyPath,
-                               OBJ_CASE_INSENSITIVE | OBJ_KERNEL_HANDLE,
-                               NULL,
-                               NULL);
-
-    Status = ZwCreateKey(&KeyHandle,
-                         READ_CONTROL,
-                         &ObjectAttributes,
-                         0,
-                         NULL,
-                         REG_OPTION_VOLATILE,
-                         NULL);
-    if (!NT_SUCCESS(Status))
-    {
-        VideoDebugPrint((Error, "QBochs: failed to create volatile boot cache-policy key (0x%08lx)\n", Status));
-        return FALSE;
-    }
-
-    ZwClose(KeyHandle);
-    return TRUE;
-}
-
-CODE_SEG("PAGE")
-static BOOLEAN
-QBochsReadBootCachePolicy(
-    _Inout_ PQBOCHS_DEVICE_EXTENSION DeviceExtension)
-{
-    BOOLEAN Uncached;
-    BOOLEAN WriteCombined;
-
-    Uncached = QBochsBootKeyExists(QBOCHS_BOOT_UNCACHED_KEY);
-    WriteCombined = QBochsBootKeyExists(QBOCHS_BOOT_WRITE_COMBINED_KEY);
-
-    if (!Uncached && !WriteCombined)
-        return FALSE;
-
-    if (Uncached)
-    {
-        DeviceExtension->BootCachePolicy = QBochsBootCachePolicyUncached;
-        if (WriteCombined)
-            VideoDebugPrint((Error, "QBochs: conflicting volatile boot cache-policy keys; forcing uncached\n"));
-    }
-    else
-    {
-        DeviceExtension->BootCachePolicy = QBochsBootCachePolicyWriteCombined;
-    }
-
-    DeviceExtension->BootPolicyLatched = TRUE;
-    return TRUE;
-}
-
-CODE_SEG("PAGE")
-static BOOLEAN
-QBochsLatchBootCachePolicy(
-    _Inout_ PQBOCHS_DEVICE_EXTENSION DeviceExtension)
-{
-    PCWSTR KeyName;
-
-    KeyName = DeviceExtension->BootCachePolicy == QBochsBootCachePolicyWriteCombined
-        ? QBOCHS_BOOT_WRITE_COMBINED_KEY
-        : QBOCHS_BOOT_UNCACHED_KEY;
-
-    if (!QBochsCreateBootKey(KeyName))
-        return FALSE;
-
-    DeviceExtension->BootPolicyLatched = TRUE;
-    return TRUE;
-}
 
 CODE_SEG("PAGE")
 static BOOLEAN
@@ -428,12 +341,12 @@ QBochsMapVideoMemory(
     MapInformation->VideoRamLength = VideoRamLength;
 
     /*
-     * The volatile boot latch chooses one request policy for the entire boot.
-     * This prevents a live VGA-to-QBochs switch from requesting P6CACHE while
-     * still allowing WC on the first QBochs activation after a reboot.
+     * The predecessor decision is made once before QBochs is registered and is
+     * immutable for this miniport instance. Mode changes and remaps therefore
+     * cannot mistake QBochs itself for a previous active display adapter.
      */
     MemSpace = VIDEO_MEMORY_SPACE_MEMORY;
-    if (DeviceExtension->BootCachePolicy == QBochsBootCachePolicyWriteCombined)
+    if (DeviceExtension->UseWriteCombining)
         MemSpace |= VIDEO_MEMORY_SPACE_P6CACHE;
 
     Status = VideoPortMapMemory(DeviceExtension,
@@ -446,23 +359,6 @@ QBochsMapVideoMemory(
     {
         StatusBlock->Status = Status;
         return FALSE;
-    }
-
-    if (!DeviceExtension->WriteCombiningReady && DeviceExtension->BootPolicyLatched)
-    {
-        ULONG Ready = 1;
-
-        if (VideoPortSetRegistryParameters(DeviceExtension,
-                                           QBOCHS_WRITE_COMBINE_READY,
-                                           &Ready,
-                                           sizeof(Ready)) == NO_ERROR)
-        {
-            DeviceExtension->WriteCombiningReady = TRUE;
-        }
-        else
-        {
-            VideoDebugPrint((Error, "QBochs: failed to arm write combining for the next boot\n"));
-        }
     }
 
     MapInformation->FrameBufferBase = MapInformation->VideoRamBase;
@@ -648,6 +544,19 @@ QBochsFindAdapter(
     if (!DeviceExtension->IoPorts.Mapped)
         return ERROR_DEV_NOT_EXIST;
 
+    /*
+     * Standard VGA uses the primary legacy I/O path. Suppress P6CACHE only
+     * when a VGA-compatible video stack was already registered before QBochs.
+     * secondary-vga has a different framebuffer and is unaffected.
+     */
+    DeviceExtension->UseWriteCombining =
+        !DeviceExtension->IoPorts.RangeInIoSpace || !QBochsPreviousVgaCompatible;
+
+    VideoDebugPrint((Info,
+                     DeviceExtension->UseWriteCombining
+                         ? "QBochs: framebuffer will request write combining\n"
+                         : "QBochs: previous VGA-compatible stack detected; framebuffer will remain uncached\n"));
+
     return NO_ERROR;
 }
 
@@ -657,52 +566,9 @@ QBochsInitialize(
     _In_ PVOID HwDeviceExtension)
 {
     PQBOCHS_DEVICE_EXTENSION DeviceExtension = HwDeviceExtension;
-    VP_STATUS Status;
 
     DeviceExtension->AvailableModeCount = 0;
     DeviceExtension->CurrentMode = 0;
-    DeviceExtension->BootCachePolicy = QBochsBootCachePolicyUncached;
-    DeviceExtension->BootPolicyLatched = FALSE;
-    DeviceExtension->WriteCombiningReady = FALSE;
-
-    Status = VideoPortGetRegistryParameters(DeviceExtension,
-                                            QBOCHS_WRITE_COMBINE_READY,
-                                            FALSE,
-                                            QBochsReadWriteCombineReady,
-                                            &DeviceExtension->WriteCombiningReady);
-
-    if (QBochsReadBootCachePolicy(DeviceExtension))
-    {
-        VideoDebugPrint((Info,
-                         DeviceExtension->BootCachePolicy == QBochsBootCachePolicyWriteCombined
-                             ? "QBochs: reusing write-combined cache policy for this boot\n"
-                             : "QBochs: reusing uncached cache policy for this boot\n"));
-    }
-    else
-    {
-        if (Status == NO_ERROR && DeviceExtension->WriteCombiningReady)
-            DeviceExtension->BootCachePolicy = QBochsBootCachePolicyWriteCombined;
-        else
-            DeviceExtension->BootCachePolicy = QBochsBootCachePolicyUncached;
-
-        if (!QBochsLatchBootCachePolicy(DeviceExtension))
-        {
-            /*
-             * Without a volatile latch a reload in this same boot could change
-             * cache attributes. Stay uncached and do not arm WC for next boot.
-             */
-            DeviceExtension->BootCachePolicy = QBochsBootCachePolicyUncached;
-            DeviceExtension->WriteCombiningReady = FALSE;
-            VideoDebugPrint((Error, "QBochs: volatile boot latch unavailable; forcing uncached framebuffer\n"));
-        }
-        else
-        {
-            VideoDebugPrint((Info,
-                             DeviceExtension->BootCachePolicy == QBochsBootCachePolicyWriteCombined
-                                 ? "QBochs: write combining enabled for this boot\n"
-                                 : "QBochs: deferring write combining until after reboot\n"));
-        }
-    }
 
     if (!QBochsGetControllerInfo(DeviceExtension))
         return FALSE;
@@ -871,6 +737,9 @@ ULONG NTAPI
 DriverEntry(PVOID Context1, PVOID Context2)
 {
     VIDEO_HW_INITIALIZATION_DATA VideoInitData;
+
+    /* Snapshot VGA compatibility before QBochs creates its own video device. */
+    QBochsPreviousVgaCompatible = QBochsVgaCompatibleExists();
 
     VideoPortZeroMemory(&VideoInitData, sizeof(VideoInitData));
 
