@@ -118,7 +118,7 @@ BearWindows has done extensive work on Windows NT framebuffer and Cirrus drivers
 | Mode setting | Direct Bochs DISPI registers | VBE/VESA BIOS interface | Cirrus-specific registers |
 | Rendering model | Windows framebuffer GDI | Windows framebuffer GDI | Hardware-specific Cirrus driver |
 | Shadow buffering | ✅ | ✅ | Driver-specific |
-| Write combining | ✅ Requested by miniport | Supported/configurable | Driver-specific |
+| Write combining | ✅ | Supported/configurable | Driver-specific |
 | Hardware 2D blitter | ❌ | ❌ | Potentially available |
 | 3D acceleration | ❌ | ❌ | ❌ |
 | QEMU framebuffer size | Large | Depends on adapter | Limited to 4 MiB VRAM |
