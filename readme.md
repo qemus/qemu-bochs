@@ -60,9 +60,7 @@ QBochs deliberately does not emulate a hardware 2D accelerator. On a virtual mac
 
 ### Write-combined framebuffer 🚀
 
-The miniport first requests the framebuffer through `VideoPortMapMemory()` with `VIDEO_MEMORY_SPACE_P6CACHE`, which asks the NT video port driver for a write-combined mapping. Sequential framebuffer writes can then be combined instead of behaving like ordinary uncached PCI memory writes.
-
-If the video port implementation rejects that mapping, QBochs retries with a normal framebuffer mapping rather than failing the display driver.
+The miniport requests the framebuffer through `VideoPortMapMemory()` with `VIDEO_MEMORY_SPACE_P6CACHE`, which asks the NT video port driver for a write-combined mapping. Sequential framebuffer writes can then be combined instead of behaving like ordinary uncached PCI memory writes.
 
 ### Windows shadow buffering 🪞
 
