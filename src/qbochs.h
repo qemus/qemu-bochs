@@ -11,6 +11,7 @@
 #define QBOCHS_H
 
 #include <ntdef.h>
+#include <ntddk.h>
 #include <dderror.h>
 #include <miniport.h>
 #include <video.h>
@@ -58,10 +59,9 @@ typedef struct
 
 typedef enum
 {
-    QBochsCachePolicyUnselected = 0,
-    QBochsCachePolicyUncached,
-    QBochsCachePolicyWriteCombined
-} QBOCHS_CACHE_POLICY;
+    QBochsBootCachePolicyUncached = 0,
+    QBochsBootCachePolicyWriteCombined
+} QBOCHS_BOOT_CACHE_POLICY;
 
 typedef struct
 {
@@ -76,7 +76,8 @@ typedef struct
     ULONG MaxYResolution;
     ULONG VramSize64K;
 
-    QBOCHS_CACHE_POLICY FrameBufferCachePolicy;
+    QBOCHS_BOOT_CACHE_POLICY BootCachePolicy;
+    BOOLEAN BootPolicyLatched;
     BOOLEAN WriteCombiningReady;
 } QBOCHS_DEVICE_EXTENSION, *PQBOCHS_DEVICE_EXTENSION;
 
