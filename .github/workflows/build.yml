@@ -69,7 +69,7 @@ jobs:
       -
         name: Restore Inf2Cat cache
         id: cache-inf2cat
-        uses: actions/cache/restore@v6
+        uses: actions/cache/restore@v4
         with:
           path: '${{ runner.temp }}\qbochs-inf2cat81'
           key: inf2cat-wdk81-8.100.25984.0-windows-2022-v2
@@ -223,7 +223,7 @@ jobs:
       -
         name: Save Inf2Cat cache
         if: steps.cache-inf2cat.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v6
+        uses: actions/cache/save@v4
         with:
           path: '${{ runner.temp }}\qbochs-inf2cat81'
           key: inf2cat-wdk81-8.100.25984.0-windows-2022-v2
@@ -247,15 +247,17 @@ jobs:
           $stageTimer = [System.Diagnostics.Stopwatch]::New()
 
           $zip = Join-Path $PWD 'output\QBochs.zip'
-          $packageRoot = Join-Path $PWD 'package'
+          $signedRoot = Join-Path $PWD 'signed'
+          $packageRoot = Join-Path $signedRoot 'package'
 
           if (-not (Test-Path $zip)) {
             throw "Missing build artifact: $zip"
           }
 
-          if (Test-Path $packageRoot) {
-            Remove-Item $packageRoot -Recurse -Force
+          if (Test-Path $signedRoot) {
+            Remove-Item $signedRoot -Recurse -Force
           }
+          New-Item -ItemType Directory -Path $signedRoot | Out-Null
 
           Expand-Archive -Path $zip -DestinationPath $packageRoot -Force
 
@@ -551,70 +553,7 @@ jobs:
             Copy-Item $cer (Join-Path $dir 'qbochs.cer') -Force
           }
 
-          $stageTimer.Restart()
-          Write-Step 'Repacking the signed QBochs archive with portable ZIP entry names.'
-          Remove-Item $zip -Force
-
-          Add-Type -AssemblyName System.IO.Compression
-
-          $zipStream = [System.IO.File]::Open(
-            $zip,
-            [System.IO.FileMode]::CreateNew,
-            [System.IO.FileAccess]::ReadWrite,
-            [System.IO.FileShare]::None
-          )
-          $archive = [System.IO.Compression.ZipArchive]::new(
-            $zipStream,
-            [System.IO.Compression.ZipArchiveMode]::Create,
-            $false
-          )
-
-          try {
-            $root = [System.IO.Path]::GetFullPath($packageRoot).TrimEnd('\') + '\'
-
-            foreach ($file in Get-ChildItem -Path $packageRoot -File -Recurse | Sort-Object FullName) {
-              $entryName = $file.FullName.Substring($root.Length).Replace('\', '/')
-
-              if (
-                $entryName.Contains('\') -or
-                $entryName.StartsWith('/') -or
-                $entryName.StartsWith('../') -or
-                $entryName.Contains('/../')
-              ) {
-                throw "Unsafe or non-portable ZIP entry name: $entryName"
-              }
-
-              $entry = $archive.CreateEntry(
-                $entryName,
-                [System.IO.Compression.CompressionLevel]::Optimal
-              )
-              $entry.LastWriteTime = [System.DateTimeOffset]$file.LastWriteTime
-
-              $input = $null
-              $outputStream = $null
-              try {
-                $input = [System.IO.File]::OpenRead($file.FullName)
-                $outputStream = $entry.Open()
-                $input.CopyTo($outputStream)
-              }
-              finally {
-                if ($outputStream) {
-                  $outputStream.Dispose()
-                }
-                if ($input) {
-                  $input.Dispose()
-                }
-              }
-            }
-          }
-          finally {
-            $archive.Dispose()
-            $zipStream.Dispose()
-          }
-
-          Write-Step ("Signed archive repacked in {0:N2}s." -f $stageTimer.Elapsed.TotalSeconds)
-
-          Write-Step 'Validating final signed package contents and ZIP entry names.'
+          Write-Step 'Validating signed package contents.'
           foreach ($dir in $driverDirs) {
             foreach ($file in 'qbochs.inf', 'qbochs.sys', 'qbochs.cat', 'qbochs.cer') {
               if (-not (Test-Path (Join-Path $dir $file))) {
@@ -623,61 +562,37 @@ jobs:
             }
           }
 
-          $requiredZipEntries = @(
-            '2k/x86/qbochs.inf',
-            '2k/x86/qbochs.sys',
-            'xp/x86/qbochs.inf',
-            'xp/x86/qbochs.sys',
-            'xp/x64/qbochs.inf',
-            'xp/x64/qbochs.sys',
-            '2k3/x86/qbochs.inf',
-            '2k3/x86/qbochs.sys',
-            '2k3/x86/qbochs.cat',
-            '2k3/x86/qbochs.cer',
-            '2k3/x64/qbochs.inf',
-            '2k3/x64/qbochs.sys',
-            '2k3/x64/qbochs.cat',
-            '2k3/x64/qbochs.cer'
-          )
-
-          $validationStream = [System.IO.File]::OpenRead($zip)
-          $validationArchive = [System.IO.Compression.ZipArchive]::new(
-            $validationStream,
-            [System.IO.Compression.ZipArchiveMode]::Read,
-            $false
-          )
-
-          try {
-            $entryNames = @($validationArchive.Entries | ForEach-Object FullName)
-
-            if ($entryNames.Count -eq 0) {
-              throw 'Signed QBochs ZIP is empty.'
-            }
-
-            foreach ($entryName in $entryNames) {
-              if (
-                $entryName.Contains('\') -or
-                $entryName.StartsWith('/') -or
-                $entryName.StartsWith('./') -or
-                $entryName.StartsWith('../') -or
-                $entryName.Contains('/../')
-              ) {
-                throw "Non-portable ZIP entry name detected after repack: $entryName"
-              }
-            }
-
-            foreach ($required in $requiredZipEntries) {
-              if ($entryNames -cnotcontains $required) {
-                throw "Signed QBochs ZIP is missing required entry: $required"
-              }
+          foreach ($required in @(
+            '2k\x86\qbochs.inf',
+            '2k\x86\qbochs.sys',
+            'xp\x86\qbochs.inf',
+            'xp\x86\qbochs.sys',
+            'xp\x64\qbochs.inf',
+            'xp\x64\qbochs.sys',
+            '2k3\x86\qbochs.inf',
+            '2k3\x86\qbochs.sys',
+            '2k3\x86\qbochs.cat',
+            '2k3\x86\qbochs.cer',
+            '2k3\x64\qbochs.inf',
+            '2k3\x64\qbochs.sys',
+            '2k3\x64\qbochs.cat',
+            '2k3\x64\qbochs.cer',
+            'license.txt'
+          )) {
+            if (-not (Test-Path (Join-Path $packageRoot $required))) {
+              throw "Signed package tree is missing required file: $required"
             }
           }
-          finally {
-            $validationArchive.Dispose()
-            $validationStream.Dispose()
+
+          $sourceArchives = @(
+            Get-ChildItem -Path (Join-Path $PWD 'output') -Filter 'QBochs-*-source.tar.gz' -File
+          )
+          if ($sourceArchives.Count -ne 1) {
+            throw "Expected exactly one QBochs source archive, found $($sourceArchives.Count)."
           }
 
-          Write-Step 'Portable ZIP entry validation passed.'
+          Copy-Item $sourceArchives[0].FullName $signedRoot -Force
+          Write-Step 'Signed package tree is ready for Linux release packaging.'
 
           Write-Step ("Server 2003 signing stage completed in {0:N2}s total." -f $overallTimer.Elapsed.TotalSeconds)
       -
@@ -685,7 +600,7 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: qbochs-signed
-          path: output/*
+          path: signed/
           if-no-files-found: error
           retention-days: 1
 
@@ -709,18 +624,55 @@ jobs:
           name: qbochs-signed
           path: output
       -
-        name: Validate release archive on Linux
+        name: Package signed release on Linux
         shell: bash
         run: |
           set -Eeuo pipefail
 
-          zip='output/QBochs.zip'
-          test -s "$zip"
+          package='output/package'
+          zipfile='output/QBochs.zip'
+          source_archive="output/QBochs-${VERSION}-source.tar.gz"
 
-          echo 'Testing QBochs.zip with Linux unzip...'
-          unzip -t "$zip" >/dev/null
+          command -v zip >/dev/null
+          command -v unzip >/dev/null
 
-          mapfile -t entries < <(unzip -Z1 "$zip")
+          test -d "$package/2k"
+          test -d "$package/xp"
+          test -d "$package/2k3"
+          test -f "$package/license.txt"
+          test -s "$source_archive"
+          tar -tzf "$source_archive" >/dev/null
+
+          for required in \
+            2k/x86/qbochs.inf \
+            2k/x86/qbochs.sys \
+            xp/x86/qbochs.inf \
+            xp/x86/qbochs.sys \
+            xp/x64/qbochs.inf \
+            xp/x64/qbochs.sys \
+            2k3/x86/qbochs.inf \
+            2k3/x86/qbochs.sys \
+            2k3/x86/qbochs.cat \
+            2k3/x86/qbochs.cer \
+            2k3/x64/qbochs.inf \
+            2k3/x64/qbochs.sys \
+            2k3/x64/qbochs.cat \
+            2k3/x64/qbochs.cer; do
+            test -f "$package/$required"
+          done
+
+          rm -f "$zipfile"
+
+          # Keep final packaging identical to the original Linux build.
+          (
+            cd "$package"
+            zip -9 -q -r "../QBochs.zip" 2k xp 2k3 license.txt
+          )
+
+          test -s "$zipfile"
+          unzip -t "$zipfile" >/dev/null
+
+          mapfile -t entries < <(unzip -Z1 "$zipfile")
           [ "${#entries[@]}" -gt 0 ]
 
           for entry in "${entries[@]}"; do
@@ -755,14 +707,21 @@ jobs:
 
           rm -rf /tmp/qbochs-release-test
           mkdir -p /tmp/qbochs-release-test
-          unzip -q "$zip" -d /tmp/qbochs-release-test
+          unzip -q "$zipfile" -d /tmp/qbochs-release-test
 
           test -f /tmp/qbochs-release-test/2k3/x86/qbochs.cat
           test -f /tmp/qbochs-release-test/2k3/x86/qbochs.cer
           test -f /tmp/qbochs-release-test/2k3/x64/qbochs.cat
           test -f /tmp/qbochs-release-test/2k3/x64/qbochs.cer
 
-          echo 'Linux unzip compatibility validation passed.'
+          rm -rf "$package"
+
+          test -s "$zipfile"
+          test -s "$source_archive"
+          [ "$(find output -mindepth 1 -maxdepth 1 -type f | wc -l)" -eq 2 ]
+          [ -z "$(find output -mindepth 1 -maxdepth 1 -type d -print -quit)" ]
+
+          echo 'Original Linux ZIP packaging and release validation passed.'
       -
         name: Create a release
         uses: action-pack/github-release@v2
