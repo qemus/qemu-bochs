@@ -37,8 +37,6 @@ AddReg = QBochs.SoftwareSettings
 [QBochs.SoftwareSettings]
 HKR,,InstalledDisplayDrivers,0x00010000,"framebuf"
 HKR,,VgaCompatible,0x00010001,0
-; Reset the internal WC readiness marker on every driver install/update.
-HKR,,QBochsWriteCombineReady,0x00010001,0
 ; Use the NT5 framebuffer shadow buffer for cached GDI rendering.
 HKR,,Acceleration.Level,0x00010001,5
 

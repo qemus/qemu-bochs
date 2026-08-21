@@ -9,8 +9,6 @@
 
 #include "qbochs.h"
 
-#define QBOCHS_WRITE_COMBINE_READY L"QBochsWriteCombineReady"
-
 static const QBOCHS_SIZE QBochsAvailableResolutions[] = {
     { 640, 480, 32 },   /* VGA */
     { 640, 480, 16 },
@@ -60,6 +58,49 @@ static const QBOCHS_SIZE QBochsAvailableResolutions[] = {
     { 3840, 2160, 16 },
 };
 
+/*
+ * Snapshot taken once in DriverEntry, before VideoPortInitialize creates any
+ * QBochs \Device\VideoN object. The volatile VgaCompatible value identifies
+ * an already-registered VGA-compatible video stack. Ambiguous registry
+ * failures intentionally mean "none" so they cannot silently disable WC.
+ */
+static BOOLEAN QBochsPreviousVgaCompatible;
+
+static BOOLEAN
+QBochsVgaCompatibleExists(VOID)
+{
+    UNICODE_STRING KeyPath;
+    UNICODE_STRING ValueName;
+    OBJECT_ATTRIBUTES ObjectAttributes;
+    HANDLE KeyHandle;
+    ULONG ResultLength;
+    NTSTATUS Status;
+
+    RtlInitUnicodeString(&KeyPath, L"\\Registry\\Machine\\HARDWARE\\DEVICEMAP\\VIDEO");
+    RtlInitUnicodeString(&ValueName, L"VgaCompatible");
+    InitializeObjectAttributes(&ObjectAttributes,
+                               &KeyPath,
+                               OBJ_CASE_INSENSITIVE | OBJ_KERNEL_HANDLE,
+                               NULL,
+                               NULL);
+
+    Status = ZwOpenKey(&KeyHandle, KEY_QUERY_VALUE, &ObjectAttributes);
+    if (!NT_SUCCESS(Status))
+        return FALSE;
+
+    Status = ZwQueryValueKey(KeyHandle,
+                             &ValueName,
+                             KeyValuePartialInformation,
+                             NULL,
+                             0,
+                             &ResultLength);
+    ZwClose(KeyHandle);
+
+    return NT_SUCCESS(Status) ||
+           Status == STATUS_BUFFER_OVERFLOW ||
+           Status == STATUS_BUFFER_TOO_SMALL;
+}
+
 CODE_SEG("PAGE")
 static VOID
 QBochsWriteDispI(
@@ -104,25 +145,6 @@ QBochsWriteDispIAndCheck(
     return QBochsReadDispI(DeviceExtension, Index) == Value;
 }
 
-CODE_SEG("PAGE")
-static VP_STATUS NTAPI
-QBochsReadWriteCombineReady(
-    _In_ PVOID HwDeviceExtension,
-    _In_ PVOID Context,
-    _In_ PWSTR ValueName,
-    _In_ PVOID ValueData,
-    _In_ ULONG ValueLength)
-{
-    PBOOLEAN Ready = Context;
-
-    (VOID)HwDeviceExtension;
-    (VOID)ValueName;
-
-    if (ValueLength >= sizeof(ULONG))
-        *Ready = (*(PULONG)ValueData != 0);
-
-    return NO_ERROR;
-}
 
 CODE_SEG("PAGE")
 static BOOLEAN
@@ -318,72 +340,25 @@ QBochsMapVideoMemory(
     MapInformation->VideoRamBase = RequestedAddress->RequestedVirtualAddress;
     MapInformation->VideoRamLength = VideoRamLength;
 
-    if (DeviceExtension->FrameBufferCachePolicy == QBochsCachePolicyUnselected)
-    {
-        /*
-         * Only the first mapping of a boot may choose the cache policy. Once
-         * selected, every mapping of this framebuffer keeps the same policy.
-         */
-        MemSpace = VIDEO_MEMORY_SPACE_MEMORY | VIDEO_MEMORY_SPACE_P6CACHE;
-        Status = VideoPortMapMemory(DeviceExtension,
-                                    VideoMemory,
-                                    &MapInformation->VideoRamLength,
-                                    &MemSpace,
-                                    &MapInformation->VideoRamBase);
+    /*
+     * The predecessor decision is made once before QBochs is registered and is
+     * immutable for this miniport instance. Mode changes and remaps therefore
+     * cannot mistake QBochs itself for a previous active display adapter.
+     */
+    MemSpace = VIDEO_MEMORY_SPACE_MEMORY;
+    if (DeviceExtension->UseWriteCombining)
+        MemSpace |= VIDEO_MEMORY_SPACE_P6CACHE;
 
-        if (Status == NO_ERROR)
-        {
-            DeviceExtension->FrameBufferCachePolicy = QBochsCachePolicyWriteCombined;
-            VideoDebugPrint((Info, "QBochs: framebuffer write combining enabled\n"));
-        }
-        else
-        {
-            /*
-             * No write-combined mapping was established, so this boot can
-             * safely select the uncached policy and retry exactly once.
-             */
-            DeviceExtension->FrameBufferCachePolicy = QBochsCachePolicyUncached;
-            MapInformation->VideoRamBase = RequestedAddress->RequestedVirtualAddress;
-            MapInformation->VideoRamLength = VideoRamLength;
-            MemSpace = VIDEO_MEMORY_SPACE_MEMORY;
-            Status = VideoPortMapMemory(DeviceExtension,
-                                        VideoMemory,
-                                        &MapInformation->VideoRamLength,
-                                        &MemSpace,
-                                        &MapInformation->VideoRamBase);
-            VideoDebugPrint((Info, "QBochs: write combining unavailable; using uncached framebuffer\n"));
-        }
-    }
-    else
-    {
-        MemSpace = VIDEO_MEMORY_SPACE_MEMORY;
-        if (DeviceExtension->FrameBufferCachePolicy == QBochsCachePolicyWriteCombined)
-            MemSpace |= VIDEO_MEMORY_SPACE_P6CACHE;
-
-        Status = VideoPortMapMemory(DeviceExtension,
-                                    VideoMemory,
-                                    &MapInformation->VideoRamLength,
-                                    &MemSpace,
-                                    &MapInformation->VideoRamBase);
-    }
+    Status = VideoPortMapMemory(DeviceExtension,
+                                VideoMemory,
+                                &MapInformation->VideoRamLength,
+                                &MemSpace,
+                                &MapInformation->VideoRamBase);
 
     if (Status != NO_ERROR)
     {
         StatusBlock->Status = Status;
         return FALSE;
-    }
-
-    if (!DeviceExtension->WriteCombiningReady)
-    {
-        ULONG Ready = 1;
-
-        if (VideoPortSetRegistryParameters(DeviceExtension,
-                                           QBOCHS_WRITE_COMBINE_READY,
-                                           &Ready,
-                                           sizeof(Ready)) == NO_ERROR)
-        {
-            DeviceExtension->WriteCombiningReady = TRUE;
-        }
     }
 
     MapInformation->FrameBufferBase = MapInformation->VideoRamBase;
@@ -569,6 +544,19 @@ QBochsFindAdapter(
     if (!DeviceExtension->IoPorts.Mapped)
         return ERROR_DEV_NOT_EXIST;
 
+    /*
+     * Standard VGA uses the primary legacy I/O path. Suppress P6CACHE only
+     * when a VGA-compatible video stack was already registered before QBochs.
+     * secondary-vga has a different framebuffer and is unaffected.
+     */
+    DeviceExtension->UseWriteCombining =
+        !DeviceExtension->IoPorts.RangeInIoSpace || !QBochsPreviousVgaCompatible;
+
+    VideoDebugPrint((Info,
+                     DeviceExtension->UseWriteCombining
+                         ? "QBochs: framebuffer will request write combining\n"
+                         : "QBochs: previous VGA-compatible stack detected; framebuffer will remain uncached\n"));
+
     return NO_ERROR;
 }
 
@@ -578,29 +566,9 @@ QBochsInitialize(
     _In_ PVOID HwDeviceExtension)
 {
     PQBOCHS_DEVICE_EXTENSION DeviceExtension = HwDeviceExtension;
-    VP_STATUS Status;
 
     DeviceExtension->AvailableModeCount = 0;
     DeviceExtension->CurrentMode = 0;
-    DeviceExtension->WriteCombiningReady = FALSE;
-    DeviceExtension->FrameBufferCachePolicy = QBochsCachePolicyUnselected;
-
-    Status = VideoPortGetRegistryParameters(DeviceExtension,
-                                            QBOCHS_WRITE_COMBINE_READY,
-                                            FALSE,
-                                            QBochsReadWriteCombineReady,
-                                            &DeviceExtension->WriteCombiningReady);
-
-    if (Status != NO_ERROR || !DeviceExtension->WriteCombiningReady)
-    {
-        /*
-         * The INF resets the marker on install/update. Keep the first driver
-         * activation uncached so it cannot conflict with an existing VGA
-         * framebuffer mapping. A successful mapping arms WC for the next load.
-         */
-        DeviceExtension->FrameBufferCachePolicy = QBochsCachePolicyUncached;
-        VideoDebugPrint((Info, "QBochs: deferring framebuffer write combining\n"));
-    }
 
     if (!QBochsGetControllerInfo(DeviceExtension))
         return FALSE;
@@ -769,6 +737,9 @@ ULONG NTAPI
 DriverEntry(PVOID Context1, PVOID Context2)
 {
     VIDEO_HW_INITIALIZATION_DATA VideoInitData;
+
+    /* Snapshot VGA compatibility before QBochs creates its own video device. */
+    QBochsPreviousVgaCompatible = QBochsVgaCompatibleExists();
 
     VideoPortZeroMemory(&VideoInitData, sizeof(VideoInitData));
 

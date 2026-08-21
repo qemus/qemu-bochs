@@ -11,6 +11,7 @@
 #define QBOCHS_H
 
 #include <ntdef.h>
+#include <ntddk.h>
 #include <dderror.h>
 #include <miniport.h>
 #include <video.h>
@@ -56,13 +57,6 @@ typedef struct
     UCHAR RangeInIoSpace;
 } QBOCHS_ADDRESS_RANGE;
 
-typedef enum
-{
-    QBochsCachePolicyUnselected = 0,
-    QBochsCachePolicyUncached,
-    QBochsCachePolicyWriteCombined
-} QBOCHS_CACHE_POLICY;
-
 typedef struct
 {
     QBOCHS_SIZE AvailableModeInfo[QBOCHS_MAX_MODES];
@@ -76,8 +70,7 @@ typedef struct
     ULONG MaxYResolution;
     ULONG VramSize64K;
 
-    QBOCHS_CACHE_POLICY FrameBufferCachePolicy;
-    BOOLEAN WriteCombiningReady;
+    BOOLEAN UseWriteCombining;
 } QBOCHS_DEVICE_EXTENSION, *PQBOCHS_DEVICE_EXTENSION;
 
 #endif /* QBOCHS_H */
