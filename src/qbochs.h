@@ -13,7 +13,9 @@
 #include <ntdef.h>
 #include <ntddk.h>
 #include <dderror.h>
+#define __BROKEN__
 #include <miniport.h>
+#undef __BROKEN__
 #include <video.h>
 #include <devioctl.h>
 #include <section_attribs.h>
