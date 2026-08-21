@@ -7,24 +7,24 @@
 
 </div></h1>
 
-QEMU Bochs display driver for Windows NT 5.x, targeting Windows 2000, XP, and Server 2003 on x86 and x64.
+QEMU Bochs display driver for Windows NT 5.x, targeting Windows 2000, XP, and Server 2003.
 
-It exists to provide a modern, redistributable display driver for QEMU Standard VGA without falling back to the very limited Cirrus device or depending on a closed third-party driver.
+Its goal is to provide a modern display driver for QEMU Standard VGA without falling back to the very limited Cirrus device or depending on a closed or commercial third-party driver.
 
 It is derived from the ReactOS Bochs miniport and talks directly to QEMU's Bochs DISPI interface while using the native Windows NT framebuffer display stack.
 
-## Why QBochs? 💡
+## Rationale 💡
 
-QEMU's `std` VGA device is a very convenient virtual display adapter: it has a simple linear framebuffer, substantially more video memory than QEMU's emulated Cirrus GD5446, and a small Bochs DISPI register interface for changing modes. The problem is that Windows NT 5.x does not ship with a native driver for it.
+QEMU's `std` VGA device is a very convenient virtual display adapter: it has a simple linear framebuffer, substantially more video memory than QEMU's emulated Cirrus GD5446, and a small Bochs DISPI register interface for changing modes.
 
-For years the practical choices have been:
+But there never was a native NT 5.x driver for it, so for years the only practical choices have been:
 
 - use QEMU `cirrus`, which has inbox Windows support but is constrained by the GD5446's small framebuffer and legacy mode limits;
 - use a universal VBE driver such as BearWindows `VBEMP`
 - use another virtual graphics device whose available NT5 drivers may not match QEMU's implementation;
 - remain on the generic VGA fallback.
 
-QBochs takes a narrower approach: support the QEMU/Bochs device directly and keep the implementation small.
+QBochs takes a narrower approach: support the QEMU/Bochs device directly and keep the implementation small and lean.
 
 ## Architecture 🏗️
 
@@ -54,19 +54,7 @@ Windows GDI / desktop
  linear framebuffer
 ```
 
-The primary target is QEMU Standard VGA:
-
-```text
--vga std
-```
-
-QBochs binds to:
-
-```text
-PCI\VEN_1234&DEV_1111
-```
-
-## Performance strategy ⚡
+## Performance ⚡
 
 QBochs deliberately does not emulate a hardware 2D accelerator. On a virtual machine that is not necessarily a disadvantage: the guest CPU is usually hardware-virtualized and extremely fast compared with the machines NT5 originally ran on. The goal is therefore to make software rendering into the framebuffer as inexpensive as possible.
 
@@ -109,21 +97,20 @@ BearWindows has done extensive work on Windows NT framebuffer and Cirrus drivers
 
 | | QBochs | BearWindows VBEMP | BearWindows CIRRUS.NT |
 | --- | --- | --- | --- |
-| Virtual device | QEMU `std` / Bochs DISPI | Any supported VBE adapter | Cirrus Logic GD54xx, including QEMU GD5446 |
+| Virtual device | QEMU `std` / Bochs DISPI | Any supported VBE adapter | Cirrus Logic GD54xx |
 | Hardware scope | QEMU-specific | Broad physical + virtual VBE hardware | Cirrus-specific |
 | Mode setting | Direct Bochs DISPI registers | VBE/VESA BIOS interface | Cirrus-specific registers |
 | Rendering model | Windows framebuffer GDI | Windows framebuffer GDI | Hardware-specific Cirrus driver |
-| Shadow buffering | Yes, via NT5 `framebuf.dll` | Yes | Driver-specific |
+| Shadow buffering | Yes | Yes | Driver-specific |
 | Write combining | Requested directly by miniport | Supported/configurable | Driver-specific |
 | Hardware 2D blitter | No | No | Potentially yes |
 | 3D acceleration | No | No | No |
-| QEMU framebuffer size | `std` is typically much larger | Depends on adapter | QEMU GD5446 is limited to 4 MiB of real VRAM |
-| High-resolution 32-bit modes | Good fit for the device | Depends on VBE adapter | Limited by Cirrus VRAM |
+| QEMU framebuffer size | Large | Depends on adapter | Limited to 4 MiB VRAM |
+| High-resolution 32-bit modes | Yes | Depends on adapter | Limited by Cirrus VRAM |
 | BIOS dependency after driver load | No for DISPI mode setting | Yes for VBE operations | No VBE dependency for native Cirrus operation |
-| Source available | Yes | Depends on release/package | Depends on release/package |
-| QBochs project redistribution goal | Yes, GPL driver source + binaries | Separate project/license | Separate project/license |
-| x86 build | Yes | Yes | Yes |
-| x64 QBochs target | Yes | Separate BearWindows support varies by release | Separate BearWindows support varies by release |
+| Free | Yes | No | No |
+| Open-source | Yes | No | No |
+| Redistributable | Yes | No | No |
 
 ## Supported systems 💻
 
@@ -134,7 +121,6 @@ BearWindows has done extensive work on Windows NT framebuffer and Cirrus drivers
 
 ## Current limitations ⚠️
 
-- 32-bit color modes only.
 - No Direct3D or OpenGL hardware acceleration.
 - No hardware BitBlt/rectangle-fill acceleration.
 - No hardware cursor implementation.
@@ -147,9 +133,7 @@ Configure an x86/x64 QEMU VM with Standard VGA:
 -vga std
 ```
 
-Then install `qbochs.inf` from the package matching the guest architecture. The INF uses the Windows installation's own `framebuf.dll`; QBochs does not redistribute that Microsoft component.
-
-Because the current packages are unsigned, Windows versions that enforce driver-signing policy may require the appropriate test/development configuration.
+Then install `qbochs.inf` from the package matching the guest architecture.
 
 ## Origins 🙏
 
