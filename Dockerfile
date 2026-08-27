@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 
-FROM ubuntu:22.04 AS toolchain
+FROM ubuntu:26.04 AS toolchain
 
 ENV DEBIAN_FRONTEND=noninteractive
 
