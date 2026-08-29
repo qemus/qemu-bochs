@@ -688,7 +688,7 @@ QBochsGetPowerState(
     _In_ ULONG HwId,
     _Out_ PVIDEO_POWER_MANAGEMENT VideoPowerControl)
 {
-    return ERROR_DEVICE_REINITIALIZATION_NEEDED;
+    return NO_ERROR;
 }
 
 CODE_SEG("PAGE")
