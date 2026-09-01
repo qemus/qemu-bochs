@@ -568,14 +568,14 @@ jobs:
             '2k\x86\qbochs.sys',
             'xp\x86\qbochs.inf',
             'xp\x86\qbochs.sys',
-            'xp\x64\qbochs.inf',
-            'xp\x64\qbochs.sys',
+            'xp\amd64\qbochs.inf',
+            'xp\amd64\qbochs.sys',
             '2k3\x86\qbochs.inf',
             '2k3\x86\qbochs.sys',
             '2k3\x86\qbochs.cat',
-            '2k3\x64\qbochs.inf',
-            '2k3\x64\qbochs.sys',
-            '2k3\x64\qbochs.cat',
+            '2k3\amd64\qbochs.inf',
+            '2k3\amd64\qbochs.sys',
+            '2k3\amd64\qbochs.cat',
             'license.txt'
           )) {
             if (-not (Test-Path (Join-Path $packageRoot $required))) {
@@ -647,14 +647,14 @@ jobs:
             2k/x86/qbochs.sys \
             xp/x86/qbochs.inf \
             xp/x86/qbochs.sys \
-            xp/x64/qbochs.inf \
-            xp/x64/qbochs.sys \
+            xp/amd64/qbochs.inf \
+            xp/amd64/qbochs.sys \
             2k3/x86/qbochs.inf \
             2k3/x86/qbochs.sys \
             2k3/x86/qbochs.cat \
-            2k3/x64/qbochs.inf \
-            2k3/x64/qbochs.sys \
-            2k3/x64/qbochs.cat; do
+            2k3/amd64/qbochs.inf \
+            2k3/amd64/qbochs.sys \
+            2k3/amd64/qbochs.cat; do
             test -f "$package/$required"
           done
 
@@ -686,14 +686,14 @@ jobs:
             2k/x86/qbochs.sys \
             xp/x86/qbochs.inf \
             xp/x86/qbochs.sys \
-            xp/x64/qbochs.inf \
-            xp/x64/qbochs.sys \
+            xp/amd64/qbochs.inf \
+            xp/amd64/qbochs.sys \
             2k3/x86/qbochs.inf \
             2k3/x86/qbochs.sys \
             2k3/x86/qbochs.cat \
-            2k3/x64/qbochs.inf \
-            2k3/x64/qbochs.sys \
-            2k3/x64/qbochs.cat; do
+            2k3/amd64/qbochs.inf \
+            2k3/amd64/qbochs.sys \
+            2k3/amd64/qbochs.cat; do
             if ! printf '%s\n' "${entries[@]}" | grep -Fqx -- "$required"; then
               echo "ERROR: QBochs.zip is missing required entry: $required" >&2
               exit 1
