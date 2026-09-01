@@ -99,9 +99,9 @@ mkdir -p \
   /dist \
   /release/2k/x86 \
   /release/xp/x86 \
-  /release/xp/x64 \
+  /release/xp/amd64 \
   /release/2k3/x86 \
-  /release/2k3/x64
+  /release/2k3/amd64
 
 driver_version="${VERSION_ARG}"
 case "${driver_version}" in
@@ -120,8 +120,8 @@ test -n "${x64_sys}"
 cp "${x86_sys}" /release/2k/x86/qbochs.sys
 cp "${x86_sys}" /release/xp/x86/qbochs.sys
 cp "${x86_sys}" /release/2k3/x86/qbochs.sys
-cp "${x64_sys}" /release/xp/x64/qbochs.sys
-cp "${x64_sys}" /release/2k3/x64/qbochs.sys
+cp "${x64_sys}" /release/xp/amd64/qbochs.sys
+cp "${x64_sys}" /release/2k3/amd64/qbochs.sys
 
 # Windows 2000 keeps an undecorated Models section. XP/Server 2003 decorate
 # only Manufacturer/Models; the DDInstall and Services sections stay common.
@@ -142,12 +142,12 @@ sed \
   -e "s/@MANUFACTURER_DECORATION@/,NTamd64/g" \
   -e "s/@MODELS_DECORATION@/.NTamd64/g" \
   -e "s/@VERSION@/${driver_version}/g" \
-  /qbochs/src/qbochs.inf.in > /release/xp/x64/qbochs.inf
-cp /release/xp/x64/qbochs.inf /release/2k3/x64/qbochs.inf
+  /qbochs/src/qbochs.inf.in > /release/xp/amd64/qbochs.inf
+cp /release/xp/amd64/qbochs.inf /release/2k3/amd64/qbochs.inf
 
 cp /qbochs/license.md /release/license.txt
 
-test ! -e /release/2k/x64
+test ! -e /release/2k/amd64
 test -z "$(grep -R '@[A-Z_]*@' /release --include='*.inf' || true)"
 
 (
@@ -160,7 +160,7 @@ tar -czf "/dist/QBochs-${VERSION_ARG}-source.tar.gz" \
   -C /qbochs src Dockerfile CMakeLists.txt readme.md license.md
 
 file /release/xp/x86/qbochs.sys
-file /release/xp/x64/qbochs.sys
+file /release/xp/amd64/qbochs.sys
 EOF_BUILD
 
 FROM scratch AS artifact
