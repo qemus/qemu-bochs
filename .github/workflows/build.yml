@@ -263,7 +263,7 @@ jobs:
 
           $driverDirs = @(
             (Join-Path $packageRoot '2k3\x86'),
-            (Join-Path $packageRoot '2k3\x64')
+            (Join-Path $packageRoot '2k3\amd64')
           )
 
           foreach ($dir in $driverDirs) {
@@ -705,7 +705,7 @@ jobs:
           unzip -q "$zipfile" -d /tmp/qbochs-release-test
 
           test -f /tmp/qbochs-release-test/2k3/x86/qbochs.cat
-          test -f /tmp/qbochs-release-test/2k3/x64/qbochs.cat
+          test -f /tmp/qbochs-release-test/2k3/amd64/qbochs.cat
 
           rm -rf "$package"
 
